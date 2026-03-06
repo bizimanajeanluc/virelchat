@@ -261,9 +261,13 @@ app.post('/api/auth/signup', async (req, res) => {
   const id = uuidv4();
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  // Check if this is the first user (make them admin)
+  // Robust Admin Check: 
+  // 1. Is it the first user?
+  // 2. Does it match the ADMIN_IDENTIFIER (email or phone) from .env?
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
-  const role = userCount.count === 0 ? 'admin' : 'user';
+  const adminIdentifier = process.env.ADMIN_IDENTIFIER;
+  const isTargetAdmin = adminIdentifier && (email === adminIdentifier || phone === adminIdentifier);
+  const role = (userCount.count === 0 || isTargetAdmin) ? 'admin' : 'user';
 
   try {
     // Check if email or phone already exists
