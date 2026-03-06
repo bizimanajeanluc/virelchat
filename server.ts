@@ -23,7 +23,7 @@ const db = new Database('chat.db');
 // Target Admin Credentials
 const targetAdminEmail = 'bizimanajeanluc73@gmail.com';
 const targetAdminPhone = '0723223652';
-const targetAdminPasswordHash = '$2b$10$bwgFcYT8Amemu1hp6qDoN.gPwULot4xfiJHXLKl3xY0g4ve0OGN/u'; // 'stevetbickmore'
+const targetAdminPasswordHash = '$2b$10$JH3Q2zqxEKYvFnzm9n68cuta7dqvAAmbjkFdTIlTe8pZLwIOObi1W'; // 'stevetbickmore'
 
 // Email Configuration
 const transporter = nodemailer.createTransport({
