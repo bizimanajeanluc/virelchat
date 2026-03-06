@@ -1,0 +1,5 @@
+{
+  "name": "virelChat",
+  "description": "virelChat: End-to-end encrypted private chat for secure communication with Signal Protocol and multi-device support.",
+  "requestFramePermissions": ["notifications"]
+}
