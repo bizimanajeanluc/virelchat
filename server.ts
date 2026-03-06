@@ -60,6 +60,12 @@ async function sendVerificationEmail(to: string, code: string) {
   }
 }
 
+async function sendVerificationSMS(to: string, code: string) {
+  // Placeholder for SMS service (Twilio, MessageBird, etc.)
+  console.log(`[SMS] Sending verification code ${code} to ${to}`);
+  // If you have a provider, implement it here
+}
+
 // Initialize Database
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -143,6 +149,7 @@ db.exec(`
     recipient_id TEXT,
     type TEXT,
     status TEXT, -- 'missed', 'accepted', 'rejected', 'busy'
+    deleted_by TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
@@ -150,9 +157,10 @@ db.exec(`
 // Migration for existing tables
 try {
   db.exec('ALTER TABLE encrypted_messages ADD COLUMN deleted_by TEXT');
-} catch (e) {
-  // Column already exists, ignore error
-}
+} catch (e) {}
+try {
+  db.exec('ALTER TABLE calls ADD COLUMN deleted_by TEXT');
+} catch (e) {}
 
 // Seed some wards if empty
 const wardCount = db.prepare('SELECT COUNT(*) as count FROM wards').get() as { count: number };
@@ -226,13 +234,26 @@ app.get('/api/calls', authenticate, (req: any, res) => {
       SELECT c.*, u.display_name as other_name, u.profile_picture as other_profile_picture
       FROM calls c
       JOIN users u ON (u.id = c.caller_id OR u.id = c.recipient_id) AND u.id != ?
-      WHERE c.caller_id = ? OR c.recipient_id = ?
+      WHERE (c.caller_id = ? OR c.recipient_id = ?)
       ORDER BY c.created_at DESC
       LIMIT 50
     `).all(userId, userId, userId);
     res.json(calls);
   } catch (err) {
+    console.error('Failed to fetch call history:', err);
     res.status(500).json({ error: 'Failed to fetch call history' });
+  }
+});
+
+// Delete Call Record
+app.delete('/api/calls/:id', authenticate, (req: any, res) => {
+  const { id } = req.params;
+  try {
+    db.prepare('DELETE FROM calls WHERE id = ?').run(id);
+    res.json({ message: 'Call record deleted completely' });
+  } catch (err) {
+    console.error('Failed to delete call record:', err);
+    res.status(500).json({ error: 'Failed to delete call record' });
   }
 });
 
@@ -287,12 +308,13 @@ app.post('/api/auth/signup', async (req, res) => {
 
     if (email) {
       await sendVerificationEmail(email, code);
+    } else if (phone) {
+      await sendVerificationSMS(phone, code);
     }
 
     res.json({ 
       userId: id, 
-      code: code, // Included for demo purposes
-      message: `Signup successful! [DEMO MODE] Your verification code is: ${code}. ${email ? 'An email has also been sent.' : ''}` 
+      message: `Signup successful! A verification code has been sent to your ${email ? 'email' : 'phone number'}.` 
     });
   } catch (err: any) {
     console.error('Signup error:', err);
@@ -945,6 +967,8 @@ io.on('connection', (socket) => {
       const { recipientId, callerName, type } = data; // type: 'audio' | 'video'
       const callId = uuidv4();
       
+      const caller = db.prepare('SELECT profile_picture FROM users WHERE id = ?').get(userId) as any;
+
       // Log attempt as 'missed' initially, update if accepted
       db.prepare(`
         INSERT INTO calls (id, caller_id, recipient_id, type, status)
@@ -955,6 +979,7 @@ io.on('connection', (socket) => {
         callId,
         callerId: userId,
         callerName,
+        callerImage: caller?.profile_picture,
         type
       });
     });

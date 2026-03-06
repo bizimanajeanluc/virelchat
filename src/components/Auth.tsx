@@ -19,9 +19,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     code: '',
   });
   const [userId, setUserId] = useState<string | null>(null);
-  const [demoCode, setDemoCode] = useState<string | null>(null);
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     api.get('/wards').then(res => setWards(res.data));
@@ -56,9 +54,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           wardId: formData.wardId,
         });
         setUserId(res.data.userId);
-        setDemoCode(res.data.code);
-        setMode('verify');
-      } else if (mode === 'verify') {
+        setMode('verify');      } else if (mode === 'verify') {
         await api.post('/auth/verify', {
           userId,
           code: formData.code.trim(),
@@ -177,13 +173,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
             {mode === 'verify' && (
               <div className="space-y-4">
-                {demoCode && (
-                  <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl text-center">
-                    <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-1">Demo Verification Code</p>
-                    <p className="text-3xl font-black text-emerald-700 tracking-[0.2em]">{demoCode}</p>
-                    <p className="text-[10px] text-emerald-500 mt-2">In production, this would be sent via Email/SMS.</p>
-                  </div>
-                )}
+                <div className="text-center mb-6">
+                  <p className="text-stone-600">
+                    A verification code has been sent to your {formData.email ? 'email' : 'phone'}.
+                  </p>
+                  <p className="text-sm text-stone-400 mt-1">Please enter the 6-digit code below to continue.</p>
+                </div>
                 <div className="relative">
                   <CheckCircle2 className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-5 h-5" />
                   <input

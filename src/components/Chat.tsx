@@ -90,6 +90,7 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
   };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
+  const candidateQueue = useRef<RTCIceCandidateInit[]>([]);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const callTimeoutRef = useRef<any>(null);
@@ -349,10 +350,15 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
 
         // Caller side: Create PeerConnection when recipient accepts
         if (localStreamRef.current && !peerConnection.current) {
+          console.log('Recipient accepted call, creating offer...');
           const pc = createPeerConnection(activeConvRef.current?.other_id || data.recipientId, localStreamRef.current);
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          socket.emit('offer', { otherId: activeConvRef.current?.other_id || data.recipientId, offer });
+          try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit('offer', { otherId: activeConvRef.current?.other_id || data.recipientId, offer });
+          } catch (err) {
+            console.error('Failed to create/set offer', err);
+          }
         }
       });
       socket.on('call_rejected', () => {
@@ -368,6 +374,7 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
       });
 
       socket.on('offer', async ({ offer, senderId }) => {
+        console.log('Received offer from:', senderId);
         if (!peerConnection.current) {
           createPeerConnection(senderId); 
         }
@@ -376,15 +383,28 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
           const answer = await peerConnection.current?.createAnswer();
           await peerConnection.current?.setLocalDescription(answer);
           socket.emit('answer', { otherId: senderId, answer });
+          
+          // Process queued candidates
+          while (candidateQueue.current.length > 0) {
+            const candidate = candidateQueue.current.shift();
+            if (candidate) await peerConnection.current?.addIceCandidate(new RTCIceCandidate(candidate));
+          }
         } catch (err) {
           console.error('Failed to handle offer', err);
         }
       });
 
       socket.on('answer', async ({ answer }) => {
+        console.log('Received answer');
         try {
-          if (peerConnection.current?.signalingState !== 'stable') {
-            await peerConnection.current?.setRemoteDescription(new RTCSessionDescription(answer));
+          if (peerConnection.current && peerConnection.current.signalingState !== 'stable') {
+            await peerConnection.current.setRemoteDescription(new RTCSessionDescription(answer));
+            
+            // Process queued candidates
+            while (candidateQueue.current.length > 0) {
+              const candidate = candidateQueue.current.shift();
+              if (candidate) await peerConnection.current?.addIceCandidate(new RTCIceCandidate(candidate));
+            }
           }
         } catch (err) {
           console.error('Failed to handle answer', err);
@@ -394,7 +414,12 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
       socket.on('ice_candidate', async ({ candidate }) => {
         try {
           if (candidate && peerConnection.current) {
-            await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+            if (peerConnection.current.remoteDescription) {
+              await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+            } else {
+              console.log('Queuing ICE candidate');
+              candidateQueue.current.push(candidate);
+            }
           }
         } catch (err) {
           console.error('Failed to add ice candidate', err);
@@ -449,6 +474,7 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
     if (peerConnection.current) {
       peerConnection.current.close();
     }
+    candidateQueue.current = [];
 
     const pc = new RTCPeerConnection({
       iceServers: [
@@ -470,7 +496,7 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
         setRemoteStream(event.streams[0]);
       } else {
         setRemoteStream(prev => {
-          const newStream = prev || new MediaStream();
+          const newStream = prev ? new MediaStream(prev.getTracks()) : new MediaStream();
           newStream.addTrack(event.track);
           return newStream;
         });
@@ -479,6 +505,7 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
 
     const streamToUse = stream || localStreamRef.current;
     if (streamToUse) {
+      console.log('Adding tracks to PeerConnection:', streamToUse.getTracks().length);
       streamToUse.getTracks().forEach(track => pc.addTrack(track, streamToUse));
     }
 
@@ -493,6 +520,15 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
     } catch (err) {
       console.error('Failed to fetch call history', err);
       setCallHistory([]);
+    }
+  };
+
+  const deleteCall = async (callId: string) => {
+    try {
+      await api.delete(`/calls/${callId}`);
+      setCallHistory(prev => prev.filter(c => c.id !== callId));
+    } catch (err) {
+      console.error('Failed to delete call', err);
     }
   };
 
@@ -552,12 +588,9 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
       setLocalStream(stream);
       localStreamRef.current = stream;
 
-      const pc = createPeerConnection(incomingCall.callerId, stream);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      
+      // Recipient just accepts and sends call_accepted.
+      // The caller will receive call_accepted and initiate the WebRTC offer.
       getSocket()?.emit('call_accepted', { callId: incomingCall.callId, callerId: incomingCall.callerId });
-      getSocket()?.emit('offer', { otherId: incomingCall.callerId, offer });
       setIncomingCall(null);
     } catch (err) {
       console.error('Failed to accept call', err);
@@ -1745,8 +1778,12 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
           >
             <div className="bg-white rounded-3xl shadow-2xl border border-stone-100 p-6 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600">
-                  {incomingCall.type === 'video' ? <Video className="w-6 h-6" /> : <Phone className="w-6 h-6" />}
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600 overflow-hidden">
+                  {incomingCall.callerImage ? (
+                    <img src={incomingCall.callerImage} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    incomingCall.type === 'video' ? <Video className="w-6 h-6" /> : <Phone className="w-6 h-6" />
+                  )}
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Incoming {incomingCall.type} call</p>
@@ -1822,15 +1859,24 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
                           </div>
                         </div>
                       </div>
-                      <button 
-                        onClick={() => {
-                          setShowCallHistory(false);
-                          startCall(call.type as any, call.caller_id === user.id ? call.recipient_id : call.caller_id);
-                        }}
-                        className="p-3 bg-stone-100 hover:bg-emerald-50 text-stone-500 hover:text-emerald-600 rounded-2xl transition-all"
-                      >
-                        <Phone className="w-5 h-5" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => deleteCall(call.id)}
+                          className="p-3 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"
+                          title="Delete Call"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setShowCallHistory(false);
+                            startCall(call.type as any, call.caller_id === user.id ? call.recipient_id : call.caller_id);
+                          }}
+                          className="p-3 bg-stone-100 hover:bg-emerald-50 text-stone-500 hover:text-emerald-600 rounded-2xl transition-all"
+                        >
+                          <Phone className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -1867,13 +1913,32 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
 
               {/* Hidden audio element for audio calls to ensure sound plays */}
               {callType === 'audio' && remoteStream && (
-                <video ref={remoteVideoRef} autoPlay playsInline muted={false} className="hidden" />
+                <video 
+                  ref={remoteVideoRef} 
+                  autoPlay 
+                  playsInline 
+                  muted={false} 
+                  onLoadedMetadata={(e) => {
+                    (e.target as HTMLVideoElement).play().catch(err => console.warn('Audio play failed:', err));
+                  }}
+                  className="absolute inset-0 opacity-0 pointer-events-none" 
+                  style={{ width: '1px', height: '1px' }}
+                />
               )}
 
               {callType === 'video' ? (
                 <>
                   {remoteStream ? (
-                    <video ref={remoteVideoRef} autoPlay playsInline muted={false} className="w-full h-full object-cover" />
+                    <video 
+                      ref={remoteVideoRef} 
+                      autoPlay 
+                      playsInline 
+                      muted={false} 
+                      onLoadedMetadata={(e) => {
+                        (e.target as HTMLVideoElement).play().catch(err => console.warn('Video play failed:', err));
+                      }}
+                      className="w-full h-full object-cover" 
+                    />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center bg-stone-800">
                       <div className="w-24 h-24 rounded-full bg-stone-700 flex items-center justify-center animate-pulse">
