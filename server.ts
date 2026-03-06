@@ -9,7 +9,6 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
-import archiver from 'archiver';
 import fs from 'fs';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
@@ -235,28 +234,6 @@ app.get('/api/calls', authenticate, (req: any, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch call history' });
   }
-});
-
-// Zip Download Route
-app.get('/api/download', (req, res) => {
-  const archive = archiver('zip', {
-    zlib: { level: 9 }
-  });
-
-  res.attachment('virelChat-project.zip');
-
-  archive.on('error', (err) => {
-    res.status(500).send({ error: err.message });
-  });
-
-  archive.pipe(res);
-
-  // Append files from the root directory, excluding node_modules and other artifacts
-  archive.glob('**/*', {
-    ignore: ['node_modules/**', 'dist/**', '.next/**', 'chat.db', 'virelChat-project.zip', '.git/**', '.env']
-  });
-
-  archive.finalize();
 });
 
 // --- REST API Routes ---

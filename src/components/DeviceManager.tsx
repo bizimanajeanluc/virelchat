@@ -67,14 +67,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({ user }) => {
             <p className="text-stone-500 mt-1">Manage your secure endpoints and cryptographic keys.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button 
-              onClick={() => window.open('/api/download', '_blank')}
-              className="bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold px-6 py-3 rounded-2xl transition-all flex items-center gap-2"
-            >
-              <Plus className="w-5 h-5 rotate-45" />
-              Download Project Source
-            </button>
-            <button 
+            <button
               onClick={registerCurrentDevice}
               disabled={isRegistering}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3 rounded-2xl shadow-lg shadow-emerald-100 transition-all flex items-center gap-2 disabled:opacity-50"
@@ -82,8 +75,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({ user }) => {
               <Plus className="w-5 h-5" />
               {isRegistering ? 'Registering...' : 'Register This Device'}
             </button>
-          </div>
-        </div>
+          </div>        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
           {devices.map((device, i) => (
