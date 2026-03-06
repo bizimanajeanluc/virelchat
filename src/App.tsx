@@ -5,9 +5,10 @@ import { Chat } from './components/Chat';
 import { Profile } from './components/Profile';
 import { Admin } from './components/Admin';
 import { DeviceManager } from './components/DeviceManager';
+import { Landing } from './components/Landing';
 import { initSocket, disconnectSocket } from './services/socket';
 import { CryptoEngine } from './crypto/engine';
-import { Shield, MessageSquare, User, Settings, LogOut, Database } from 'lucide-react';
+import { Shield, MessageSquare, User, Settings, LogOut, Database, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [view, setView] = useState<'chat' | 'profile' | 'devices' | 'admin'>('chat');
   const [isLoading, setIsLoading] = useState(true);
+  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -118,6 +120,7 @@ export default function App() {
     localStorage.setItem('user', JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
+    setShowAuth(false);
   };
 
   const handleLogout = () => {
@@ -125,12 +128,29 @@ export default function App() {
     localStorage.removeItem('user');
     setToken(null);
     setUser(null);
+    setShowAuth(false);
     disconnectSocket();
   };
 
   if (isLoading) return <div className="h-screen flex items-center justify-center bg-stone-100">Loading...</div>;
 
-  if (!token) return <Auth onLogin={handleLogin} />;
+  if (!token) {
+    if (showAuth) {
+      return (
+        <div className="h-screen relative">
+          <button 
+            onClick={() => setShowAuth(false)}
+            className="absolute top-4 left-4 z-[100] flex items-center gap-2 px-4 py-2 bg-white border border-stone-200 rounded-xl font-bold text-stone-600 hover:bg-stone-50 transition-all shadow-sm"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Home
+          </button>
+          <Auth onLogin={handleLogin} />
+        </div>
+      );
+    }
+    return <Landing onGetStarted={() => setShowAuth(true)} />;
+  }
 
   return (
     <div className="h-[100dvh] flex flex-col bg-stone-100 text-stone-900 font-sans overflow-hidden">
