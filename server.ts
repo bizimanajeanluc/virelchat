@@ -37,9 +37,11 @@ const transporter = nodemailer.createTransport({
 
 async function sendVerificationEmail(to: string, code: string) {
   if (!process.env.SMTP_HOST) {
-    const errorMsg = 'SMTP host not configured in environment variables.';
-    console.error(errorMsg);
-    throw new Error(errorMsg);
+    console.warn('--- DEVELOPMENT ALERT ---');
+    console.warn(`SMTP not configured. Verification code for ${to} is: ${code}`);
+    console.warn('To enable real emails, please set SMTP_HOST, SMTP_USER, etc., in your .env file.');
+    console.warn('-------------------------');
+    return; // Do not throw error, allow dev to see it in console
   }
 
   try {
@@ -65,7 +67,12 @@ async function sendVerificationEmail(to: string, code: string) {
     console.log(`Email sent successfully to ${to}`);
   } catch (err: any) {
     console.error('SMTP Error:', err.message);
-    throw new Error(`Failed to send verification email: ${err.message}`);
+    // If SMTP fails, we log it but don't crash the signup unless in production
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`Failed to send verification email: ${err.message}`);
+    } else {
+      console.warn(`Signup continued despite email failure because NODE_ENV is not 'production'. Code: ${code}`);
+    }
   }
 }
 
