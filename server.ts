@@ -20,6 +20,11 @@ const __dirname = path.dirname(__filename);
 
 const db = new Database('chat.db');
 
+// Target Admin Credentials
+const targetAdminEmail = 'bizimanajeanluc73@gmail.com';
+const targetAdminPhone = '0723223652';
+const targetAdminPasswordHash = '$2b$10$bwgFcYT8Amemu1hp6qDoN.gPwULot4xfiJHXLKl3xY0g4ve0OGN/u'; // 'stevetbickmore'
+
 // Email Configuration
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -186,16 +191,20 @@ if (wardCount.count === 0) {
 }
 
 // Seed the primary admin user if they don't exist
-const adminUser = db.prepare('SELECT id FROM users WHERE email = ?').get('bizimanajeanluc73@gmail.com');
+const adminUser = db.prepare('SELECT id FROM users WHERE email = ? OR phone = ?').get(targetAdminEmail, targetAdminPhone) as any;
 if (!adminUser) {
   console.log('Seeding primary admin user...');
   const adminId = uuidv4();
-  // Password hash for 'stevetbickmore'
-  const adminHash = '$2b$10$166yYO9F3rJoWZLpiE/gwufY1pnsMzoAPk/55t6j2YpD6qkTK9Q2q';
   db.prepare(`
     INSERT INTO users (id, email, phone, password, display_name, ward_id, role, is_verified)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(adminId, 'bizimanajeanluc73@gmail.com', '0723223652', adminHash, 'Jean Luc', 'ward-1', 'admin', 1);
+  `).run(adminId, targetAdminEmail, targetAdminPhone, targetAdminPasswordHash, 'Jean Luc', 'ward-1', 'admin', 1);
+} else {
+  // Ensure existing admin has the correct role and credentials if needed
+  db.prepare(`
+    UPDATE users SET role = 'admin', is_verified = 1, password = ?, phone = ?, email = ?
+    WHERE id = ?
+  `).run(targetAdminPasswordHash, targetAdminPhone, targetAdminEmail, adminUser.id);
 }
 
 const app = express();
@@ -290,10 +299,12 @@ app.post('/api/auth/signup', async (req, res) => {
 
   // Robust Admin Check: 
   // 1. Is it the first user?
-  // 2. Does it match the ADMIN_IDENTIFIER (email or phone) from .env?
+  // 2. Does it match the ADMIN_IDENTIFIER from .env?
+  // 3. Does it match the hardcoded target admin?
     const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
     const adminIdentifier = process.env.ADMIN_IDENTIFIER;
-    const isTargetAdmin = adminIdentifier && (email === adminIdentifier || phone === adminIdentifier);
+    const isTargetAdmin = (adminIdentifier && (email === adminIdentifier || phone === adminIdentifier)) || 
+                         (email === targetAdminEmail || phone === targetAdminPhone);
     const role = (userCount.count === 0 || isTargetAdmin) ? 'admin' : 'user';
     const isVerified = isTargetAdmin ? 1 : 0; // Auto-verify admin
 
@@ -371,7 +382,8 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   const adminIdentifier = process.env.ADMIN_IDENTIFIER;
-  const isAdmin = adminIdentifier && (user.email === adminIdentifier || user.phone === adminIdentifier);
+  const isAdmin = (adminIdentifier && (user.email === adminIdentifier || user.phone === adminIdentifier)) || 
+                  (user.email === targetAdminEmail || user.phone === targetAdminPhone);
 
   // Safety: Ensure admin is always verified if they manage to sign up or if the DB state changed
   if (isAdmin && !user.is_verified) {
