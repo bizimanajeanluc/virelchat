@@ -41,16 +41,18 @@ async function sendVerificationEmail(to: string, code: string) {
     await transporter.sendMail({
       from: `"virelChat" <${process.env.SMTP_USER}>`,
       to,
-      subject: 'Your virelChat Verification Code',
-      text: `Your verification code is: ${code}. It expires in 10 minutes.`,
+      subject: `${code} is your virelChat verification code`,
+      text: `Welcome to virelChat!\n\nYour verification code is: ${code}\n\nThis code will expire in 10 minutes.`,
       html: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
-          <h2 style="color: #059669;">Welcome to virelChat</h2>
-          <p>Please use the following code to verify your account:</p>
-          <div style="background: #f3f4f6; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 10px; color: #111827; border-radius: 8px;">
-            ${code}
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px; color: #374151;">
+          <h2 style="color: #059669; margin-bottom: 24px;">Welcome to virelChat</h2>
+          <p style="font-size: 16px; line-height: 24px;">Please use the following code to verify your account:</p>
+          <div style="background-color: #f3f4f6; padding: 32px; text-align: center; margin: 24px 0; border-radius: 8px;">
+            <span style="font-size: 38px; font-weight: bold; letter-spacing: 12px; color: #111827; font-family: monospace;">${code}</span>
           </div>
-          <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">This code will expire in 10 minutes.</p>
+          <p style="color: #6b7280; font-size: 14px; margin-top: 32px; border-top: 1px solid #f3f4f6; padding-top: 16px;">
+            This code will expire in 10 minutes. If you didn't request this code, you can safely ignore this email.
+          </p>
         </div>
       `,
     });
