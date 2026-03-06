@@ -162,6 +162,19 @@ if (wardCount.count === 0) {
   db.prepare('INSERT INTO wards (id, name) VALUES (?, ?)').run('ward-2', 'Provo 5th Ward');
 }
 
+// Seed the primary admin user if they don't exist
+const adminUser = db.prepare('SELECT id FROM users WHERE email = ?').get('bizimanajeanluc73@gmail.com');
+if (!adminUser) {
+  console.log('Seeding primary admin user...');
+  const adminId = uuidv4();
+  // Password hash for 'stevetbickmore'
+  const adminHash = '$2b$10$166yYO9F3rJoWZLpiE/gwufY1pnsMzoAPk/55t6j2YpD6qkTK9Q2q';
+  db.prepare(`
+    INSERT INTO users (id, email, phone, password, display_name, ward_id, role, is_verified)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(adminId, 'bizimanajeanluc73@gmail.com', '0723223652', adminHash, 'Jean Luc', 'ward-1', 'admin', 1);
+}
+
 const app = express();
 app.use(cors());
 const httpServer = createServer(app);
