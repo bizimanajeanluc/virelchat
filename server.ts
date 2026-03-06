@@ -291,46 +291,41 @@ app.post('/api/auth/signup', async (req, res) => {
   // Robust Admin Check: 
   // 1. Is it the first user?
   // 2. Does it match the ADMIN_IDENTIFIER (email or phone) from .env?
-  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
-  const adminIdentifier = process.env.ADMIN_IDENTIFIER;
-  const isTargetAdmin = adminIdentifier && (email === adminIdentifier || phone === adminIdentifier);
-  const role = (userCount.count === 0 || isTargetAdmin) ? 'admin' : 'user';
-
-  try {
-    // Check if email or phone already exists
-    if (email) {
-      const existingEmail = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-      if (existingEmail) return res.status(400).json({ error: 'Email already registered' });
-    }
-    if (phone) {
-      const existingPhone = db.prepare('SELECT id FROM users WHERE phone = ?').get(phone);
-      if (existingPhone) return res.status(400).json({ error: 'Phone number already registered' });
-    }
+    const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
+    const adminIdentifier = process.env.ADMIN_IDENTIFIER;
+    const isTargetAdmin = adminIdentifier && (email === adminIdentifier || phone === adminIdentifier);
+    const role = (userCount.count === 0 || isTargetAdmin) ? 'admin' : 'user';
+    const isVerified = isTargetAdmin ? 1 : 0; // Auto-verify admin
 
     db.prepare(`
-      INSERT INTO users (id, email, phone, password, display_name, ward_id, role)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, email || null, phone || null, hashedPassword, displayName, wardId, role);
+      INSERT INTO users (id, email, phone, password, display_name, ward_id, role, is_verified)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, email || null, phone || null, hashedPassword, displayName, wardId, role, isVerified);
 
-    // Generate verification code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
-    db.prepare(`
-      INSERT INTO verification_codes (id, user_id, code, expires_at)
-      VALUES (?, ?, ?, ?)
-    `).run(uuidv4(), id, code, expiresAt);
+    if (isVerified) {
+      console.log(`Admin account ${email || phone} auto-verified.`);
+    } else {
+      // Generate verification code
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
+      db.prepare(`
+        INSERT INTO verification_codes (id, user_id, code, expires_at)
+        VALUES (?, ?, ?, ?)
+      `).run(uuidv4(), id, code, expiresAt);
 
-    console.log(`Verification code for ${email || phone}: ${code}`); // In production, send via Email/SMS
+      console.log(`Verification code for ${email || phone}: ${code}`); // In production, send via Email/SMS
 
-    if (email) {
-      await sendVerificationEmail(email, code);
-    } else if (phone) {
-      await sendVerificationSMS(phone, code);
+      if (email) {
+        await sendVerificationEmail(email, code);
+      } else if (phone) {
+        await sendVerificationSMS(phone, code);
+      }
     }
 
     res.json({ 
-      userId: id, 
-      message: `Signup successful! A verification code has been sent to your ${email ? 'email' : 'phone number'}.` 
+      userId: id,
+      isVerified: !!isVerified,
+      message: isVerified ? 'Signup successful! Admin account ready.' : `Signup successful! A verification code has been sent to your ${email ? 'email' : 'phone number'}.` 
     });
   } catch (err: any) {
     console.error('Signup error:', err);
@@ -375,11 +370,25 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
+  const adminIdentifier = process.env.ADMIN_IDENTIFIER;
+  const isAdmin = adminIdentifier && (user.email === adminIdentifier || user.phone === adminIdentifier);
+
+  // Safety: Ensure admin is always verified if they manage to sign up or if the DB state changed
+  if (isAdmin && !user.is_verified) {
+    db.prepare('UPDATE users SET is_verified = 1 WHERE id = ?').run(user.id);
+    user.is_verified = 1;
+  }
+
   if (!user.is_verified) {
     return res.status(403).json({ error: 'Account not verified', userId: user.id });
   }
 
-  const token = jwt.sign({ id: user.id, wardId: user.ward_id, role: user.role }, JWT_SECRET);
+  // Admin tokens last for 100 years, regular users for 1 year (already effectively forever if not specified, but let's be explicit)
+  const token = jwt.sign(
+    { id: user.id, wardId: user.ward_id, role: user.role }, 
+    JWT_SECRET,
+    { expiresIn: isAdmin ? '100y' : '365d' }
+  );
   res.json({ token, user: { id: user.id, displayName: user.display_name, wardId: user.ward_id, role: user.role, profilePicture: user.profile_picture } });
 });
 

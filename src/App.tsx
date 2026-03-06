@@ -124,6 +124,11 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    if (user?.role === 'admin') {
+      if (!window.confirm('Are you sure you want to logout? (Always logged in is recommended for admin)')) {
+        return;
+      }
+    }
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setToken(null);

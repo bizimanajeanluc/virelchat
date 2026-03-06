@@ -54,7 +54,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           wardId: formData.wardId,
         });
         setUserId(res.data.userId);
-        setMode('verify');      } else if (mode === 'verify') {
+        if (res.data.isVerified) {
+          setMode('login');
+          alert('Admin account created successfully! Please login.');
+        } else {
+          setMode('verify');
+        }
+      } else if (mode === 'verify') {
         await api.post('/auth/verify', {
           userId,
           code: formData.code.trim(),
