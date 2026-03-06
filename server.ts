@@ -29,15 +29,21 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+  tls: {
+    // Do not fail on invalid certs
+    rejectUnauthorized: false
+  }
 });
 
 async function sendVerificationEmail(to: string, code: string) {
   if (!process.env.SMTP_HOST) {
-    console.log('SMTP not configured. Code:', code);
-    return;
+    const errorMsg = 'SMTP host not configured in environment variables.';
+    console.error(errorMsg);
+    throw new Error(errorMsg);
   }
 
   try {
+    await transporter.verify(); // Verify connection before sending
     await transporter.sendMail({
       from: `"virelChat" <${process.env.SMTP_USER}>`,
       to,
@@ -56,9 +62,10 @@ async function sendVerificationEmail(to: string, code: string) {
         </div>
       `,
     });
-    console.log(`Email sent to ${to}`);
-  } catch (err) {
-    console.error('Error sending email:', err);
+    console.log(`Email sent successfully to ${to}`);
+  } catch (err: any) {
+    console.error('SMTP Error:', err.message);
+    throw new Error(`Failed to send verification email: ${err.message}`);
   }
 }
 
@@ -320,7 +327,7 @@ app.post('/api/auth/signup', async (req, res) => {
     });
   } catch (err: any) {
     console.error('Signup error:', err);
-    res.status(400).json({ error: 'User already exists or invalid data' });
+    res.status(400).json({ error: err.message || 'Signup failed' });
   }
 });
 
