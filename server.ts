@@ -40,13 +40,13 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-async function sendVerificationEmail(to: string, code: string) {
+async function sendVerificationEmail(to: string, code: string): Promise<boolean> {
   if (!process.env.SMTP_HOST) {
     console.warn('--- DEVELOPMENT ALERT ---');
     console.warn(`SMTP not configured. Verification code for ${to} is: ${code}`);
     console.warn('To enable real emails, please set SMTP_HOST, SMTP_USER, etc., in your .env file.');
     console.warn('-------------------------');
-    return; // Do not throw error, allow dev to see it in console
+    return false;
   }
 
   try {
@@ -70,14 +70,10 @@ async function sendVerificationEmail(to: string, code: string) {
       `,
     });
     console.log(`Email sent successfully to ${to}`);
+    return true;
   } catch (err: any) {
     console.error('SMTP Error:', err.message);
-    // If SMTP fails, we log it but don't crash the signup unless in production
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(`Failed to send verification email: ${err.message}`);
-    } else {
-      console.warn(`Signup continued despite email failure because NODE_ENV is not 'production'. Code: ${code}`);
-    }
+    throw new Error(`Failed to send verification email: ${err.message}`);
   }
 }
 
@@ -286,21 +282,22 @@ app.delete('/api/calls/:id', authenticate, (req: any, res) => {
 
 // Signup
 app.post('/api/auth/signup', async (req, res) => {
-  const { email, phone, password, displayName, wardId } = req.body;
-  console.log('Signup attempt:', { email, phone, displayName, wardId });
-  
-  if (!password || (!email && !phone) || !displayName || !wardId) {
-    console.log('Signup failed: Missing required fields');
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
+  try {
+    const { email, phone, password, displayName, wardId } = req.body;
+    console.log('Signup attempt:', { email, phone, displayName, wardId });
+    
+    if (!password || (!email && !phone) || !displayName || !wardId) {
+      console.log('Signup failed: Missing required fields');
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
 
-  const id = uuidv4();
-  const hashedPassword = await bcrypt.hash(password, 10);
+    const id = uuidv4();
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-  // Robust Admin Check: 
-  // 1. Is it the first user?
-  // 2. Does it match the ADMIN_IDENTIFIER from .env?
-  // 3. Does it match the hardcoded target admin?
+    // Robust Admin Check: 
+    // 1. Is it the first user?
+    // 2. Does it match the ADMIN_IDENTIFIER from .env?
+    // 3. Does it match the hardcoded target admin?
     const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
     const adminIdentifier = process.env.ADMIN_IDENTIFIER;
     const isTargetAdmin = (adminIdentifier && (email === adminIdentifier || phone === adminIdentifier)) || 
@@ -313,31 +310,49 @@ app.post('/api/auth/signup', async (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, email || null, phone || null, hashedPassword, displayName, wardId, role, isVerified);
 
-    if (isVerified) {
-      console.log(`Admin account ${email || phone} auto-verified.`);
-    } else {
-      // Generate verification code
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
-      db.prepare(`
-        INSERT INTO verification_codes (id, user_id, code, expires_at)
-        VALUES (?, ?, ?, ?)
-      `).run(uuidv4(), id, code, expiresAt);
+    try {
+      let emailSent = false;
+      let verificationCode = '';
 
-      console.log(`Verification code for ${email || phone}: ${code}`); // In production, send via Email/SMS
+      if (isVerified) {
+        console.log(`Admin account ${email || phone} auto-verified.`);
+      } else {
+        // Generate verification code
+        verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
+        db.prepare(`
+          INSERT INTO verification_codes (id, user_id, code, expires_at)
+          VALUES (?, ?, ?, ?)
+        `).run(uuidv4(), id, verificationCode, expiresAt);
 
-      if (email) {
-        await sendVerificationEmail(email, code);
-      } else if (phone) {
-        await sendVerificationSMS(phone, code);
+        console.log(`Verification code for ${email || phone}: ${verificationCode}`); // In production, send via Email/SMS
+
+        if (email) {
+          emailSent = await sendVerificationEmail(email, verificationCode);
+        } else if (phone) {
+          await sendVerificationSMS(phone, verificationCode);
+          emailSent = false; // SMS is currently a placeholder
+        }
       }
-    }
 
-    res.json({ 
-      userId: id,
-      isVerified: !!isVerified,
-      message: isVerified ? 'Signup successful! Admin account ready.' : `Signup successful! A verification code has been sent to your ${email ? 'email' : 'phone number'}.` 
-    });
+      res.json({ 
+        userId: id,
+        isVerified: !!isVerified,
+        code: !emailSent ? verificationCode : undefined, // Provide code in response only if email/SMS NOT sent
+        message: isVerified 
+          ? 'Signup successful! Admin account ready.' 
+          : (emailSent 
+              ? `Signup successful! A verification code has been sent to your ${email ? 'email' : 'phone number'}.`
+              : `Signup successful! [DEMO MODE] Your verification code is: ${verificationCode}. An email has also been sent.`)
+      });
+    } catch (err: any) {
+      console.error('Signup notification error:', err);
+      // Even if email fails, we already created the user, but we should inform them
+      res.status(500).json({ 
+        error: 'Account created, but failed to send verification code. Please contact admin or try again later.',
+        userId: id 
+      });
+    }
   } catch (err: any) {
     console.error('Signup error:', err);
     res.status(400).json({ error: err.message || 'Signup failed' });
