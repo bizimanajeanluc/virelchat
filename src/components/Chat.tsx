@@ -544,7 +544,11 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
         video: type === 'video'
       });
       setLocalStream(stream);
@@ -582,8 +586,12 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: incomingCall.type === 'video'
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: type === 'video'
       });
       setLocalStream(stream);
       localStreamRef.current = stream;
@@ -644,8 +652,15 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
   // Voice Note Functions
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+      const recorder = new MediaRecorder(stream, { mimeType });
       const chunks: Blob[] = [];
 
       recorder.ondataavailable = (e) => {
@@ -653,11 +668,15 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
       };
 
       recorder.onstop = async () => {
-        const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+        const audioBlob = new Blob(chunks, { type: mimeType });
         const reader = new FileReader();
         reader.readAsDataURL(audioBlob);
         reader.onloadend = async () => {
-          const base64Audio = reader.result as string;
+          let base64Audio = reader.result as string;
+          // Ensure it starts with data:audio
+          if (!base64Audio.startsWith('data:audio')) {
+            base64Audio = `data:audio/webm;base64,${base64Audio.split(',')[1]}`;
+          }
           await sendVoiceNote(base64Audio);
         };
         stream.getTracks().forEach(track => track.stop());

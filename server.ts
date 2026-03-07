@@ -50,6 +50,7 @@ async function sendVerificationEmail(to: string, code: string): Promise<boolean>
   }
 
   try {
+    console.log(`Attempting to send verification email to ${to} via ${process.env.SMTP_HOST}...`);
     await transporter.verify(); // Verify connection before sending
     await transporter.sendMail({
       from: `"virelChat" <${process.env.SMTP_USER}>`,
@@ -72,7 +73,12 @@ async function sendVerificationEmail(to: string, code: string): Promise<boolean>
     console.log(`Email sent successfully to ${to}`);
     return true;
   } catch (err: any) {
-    console.error('SMTP Error:', err.message);
+    console.error('--- SMTP ERROR DETAILS ---');
+    console.error('Code:', err.code);
+    console.error('Command:', err.command);
+    console.error('Response:', err.response);
+    console.error('Message:', err.message);
+    console.error('---------------------------');
     throw new Error(`Failed to send verification email: ${err.message}`);
   }
 }
@@ -283,32 +289,60 @@ app.delete('/api/calls/:id', authenticate, (req: any, res) => {
 // Signup
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { email, phone, password, displayName, wardId } = req.body;
+    let { email, phone, password, displayName, wardId } = req.body;
     console.log('Signup attempt:', { email, phone, displayName, wardId });
     
-    if (!password || (!email && !phone) || !displayName || !wardId) {
+    if (!password || (!email && !phone) || !displayName) {
       console.log('Signup failed: Missing required fields');
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const id = uuidv4();
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Default Ward Logic: If no wardId provided, assign to a "Public" ward
+    if (!wardId) {
+      const publicWard = db.prepare("SELECT id FROM wards WHERE name = 'Public Ward' OR id = 'public-ward'").get() as any;
+      if (publicWard) {
+        wardId = publicWard.id;
+      } else {
+        // Create it if it doesn't exist
+        wardId = 'public-ward';
+        db.prepare("INSERT OR IGNORE INTO wards (id, name) VALUES (?, ?)").run(wardId, 'Public Ward');
+      }
+    }
 
-    // Robust Admin Check: 
-    // 1. Is it the first user?
-    // 2. Does it match the ADMIN_IDENTIFIER from .env?
-    // 3. Does it match the hardcoded target admin?
-    const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
-    const adminIdentifier = process.env.ADMIN_IDENTIFIER;
-    const isTargetAdmin = (adminIdentifier && (email === adminIdentifier || phone === adminIdentifier)) || 
-                         (email === targetAdminEmail || phone === targetAdminPhone);
-    const role = (userCount.count === 0 || isTargetAdmin) ? 'admin' : 'user';
-    const isVerified = isTargetAdmin ? 1 : 0; // Auto-verify admin
+    // Check if user already exists
+    const existingUser = db.prepare('SELECT * FROM users WHERE email = ? OR (phone IS NOT NULL AND phone = ?)').get(email || '', phone || '') as any;
+    
+    let id;
+    let isVerified = 0;
+    let role = 'user';
 
-    db.prepare(`
-      INSERT INTO users (id, email, phone, password, display_name, ward_id, role, is_verified)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, email || null, phone || null, hashedPassword, displayName, wardId, role, isVerified);
+    if (existingUser) {
+      if (existingUser.is_verified) {
+        return res.status(400).json({ error: 'An account with this email/phone already exists. Please login.' });
+      }
+      // If not verified, we'll update the existing record and send a new code
+      id = existingUser.id;
+      const hashedPassword = await bcrypt.hash(password, 10);
+      db.prepare(`
+        UPDATE users SET password = ?, display_name = ?, ward_id = ? WHERE id = ?
+      `).run(hashedPassword, displayName, wardId, id);
+      console.log(`Updated unverified user: ${email || phone}`);
+    } else {
+      id = uuidv4();
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
+      const adminIdentifier = process.env.ADMIN_IDENTIFIER;
+      const isTargetAdmin = (adminIdentifier && (email === adminIdentifier || phone === adminIdentifier)) || 
+                           (email === targetAdminEmail || phone === targetAdminPhone);
+      role = (userCount.count === 0 || isTargetAdmin) ? 'admin' : 'user';
+      isVerified = isTargetAdmin ? 1 : 0;
+
+      db.prepare(`
+        INSERT INTO users (id, email, phone, password, display_name, ward_id, role, is_verified)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, email || null, phone || null, hashedPassword, displayName, wardId, role, isVerified);
+    }
 
     try {
       let emailSent = false;
@@ -325,25 +359,31 @@ app.post('/api/auth/signup', async (req, res) => {
           VALUES (?, ?, ?, ?)
         `).run(uuidv4(), id, verificationCode, expiresAt);
 
-        console.log(`Verification code for ${email || phone}: ${verificationCode}`); // In production, send via Email/SMS
+        console.log(`Verification code for ${email || phone}: ${verificationCode}`);
 
         if (email) {
-          emailSent = await sendVerificationEmail(email, verificationCode);
+          // User explicitly wants it sent to Gmail/Email
+          try {
+            emailSent = await sendVerificationEmail(email, verificationCode);
+          } catch (err: any) {
+            console.error('Failed to send to Gmail:', err.message);
+            throw new Error(`Could not send verification code to ${email}. Please ensure your Gmail settings are correct.`);
+          }
         } else if (phone) {
           await sendVerificationSMS(phone, verificationCode);
-          emailSent = false; // SMS is currently a placeholder
+          emailSent = false;
         }
       }
 
       res.json({ 
         userId: id,
         isVerified: !!isVerified,
-        code: !emailSent ? verificationCode : undefined, // Provide code in response only if email/SMS NOT sent
+        code: !emailSent ? verificationCode : undefined,
         message: isVerified 
           ? 'Signup successful! Admin account ready.' 
           : (emailSent 
-              ? `Signup successful! A verification code has been sent to your ${email ? 'email' : 'phone number'}.`
-              : `Signup successful! [DEMO MODE] Your verification code is: ${verificationCode}. An email has also been sent.`)
+              ? `Signup successful! A verification code has been sent to your Gmail: ${email}.`
+              : `Signup successful! Your verification code is: ${verificationCode}.`)
       });
     } catch (err: any) {
       console.error('Signup notification error:', err);

@@ -43,9 +43,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         });
         onLogin(res.data.token, res.data.user);
       } else if (mode === 'signup') {
-        if (!formData.wardId) {
-          throw new Error('Please select your ward');
-        }
         const res = await api.post('/auth/signup', {
           email,
           phone,
@@ -149,12 +146,11 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     <div className="relative">
                       <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-5 h-5" />
                       <select
-                        required
                         className="w-full pl-12 pr-4 py-3.5 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all appearance-none"
                         value={formData.wardId}
                         onChange={e => setFormData({ ...formData, wardId: e.target.value })}
                       >
-                        <option value="">Select Your Ward</option>
+                        <option value="">Select Ward (Optional)</option>
                         {wards.map(w => (
                           <option key={w.id} value={w.id}>{w.name}</option>
                         ))}
