@@ -294,17 +294,10 @@ app.post('/api/auth/signup', async (req, res) => {
     const id = uuidv4();
     const hashedPassword = await bcrypt.hash(password, 10);
 
-<<<<<<< HEAD
     // Robust Admin Check: 
     // 1. Is it the first user?
     // 2. Does it match the ADMIN_IDENTIFIER from .env?
     // 3. Does it match the hardcoded target admin?
-=======
-  // Robust Admin Check: 
-  // 1. Is it the first user?
-  // 2. Does it match the ADMIN_IDENTIFIER from .env?
-  // 3. Does it match the hardcoded target admin?
->>>>>>> 8c58e95 (feat: hardcode target admin credentials and ensure auto-verification)
     const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
     const adminIdentifier = process.env.ADMIN_IDENTIFIER;
     const isTargetAdmin = (adminIdentifier && (email === adminIdentifier || phone === adminIdentifier)) || 
