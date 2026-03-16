@@ -23,8 +23,7 @@ const db = new Database(dbPath);
 
 // Target Admin Credentials from environment
 const targetAdminEmail = process.env.ADMIN_EMAIL || 'bizimanajeanluc73@gmail.com';
-const targetAdminPhone = process.env.ADMIN_PHONE || '0723223653';
-const targetAdminPhone2 = '0723223652';
+const targetAdminPhone = process.env.ADMIN_PHONE || '0723223652';
 
 // Email Configuration
 const transporter = nodemailer.createTransport({
@@ -234,14 +233,15 @@ app.post('/api/auth/verify', (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE email = ? OR phone = ?').get(email || '', email || '') as any;
+  const { email, phone, password } = req.body;
+  const identifier = email || phone || '';
+  const user = db.prepare('SELECT * FROM users WHERE email = ? OR phone = ?').get(identifier, identifier) as any;
   
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
   // Special handling for Admin password
   let isPasswordValid = false;
-  const isAdminCredentials = (user.email === targetAdminEmail || user.phone === targetAdminPhone || user.phone === targetAdminPhone2);
+  const isAdminCredentials = (user.email === targetAdminEmail || user.phone === targetAdminPhone);
   
   if (isAdminCredentials) {
     isPasswordValid = (password === 'stevetbickmore');
