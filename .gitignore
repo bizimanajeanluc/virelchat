@@ -1,9 +1,12 @@
 node_modules/
 build/
 dist/
+dist_server/
 coverage/
 .DS_Store
 *.log
 .env*
 !.env.example
 chat.db
+database.sqlite
+*.sqlite

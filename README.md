@@ -30,6 +30,22 @@ virelChat is a state-of-the-art private messaging platform built on the Signal P
    npm run dev
    ```
 
+## Deployment & Persistence (CRITICAL)
+
+### SQLite Persistence
+Since this app uses **SQLite** (`chat.db`), your data is stored in a local file. When deploying to cloud platforms (Railway, Render, etc.), you **MUST** configure a **Persistent Volume**:
+1.  **Mount Point:** Mount a persistent volume at the location of your `chat.db` (default is root).
+2.  **Environment Variable:** Set `DATABASE_PATH` in your cloud provider to point to the mounted file (e.g., `/data/chat.db`).
+
+If you do not set up a persistent volume, **your database will be wiped** every time the server restarts or you redeploy.
+
+### Production Build
+To build the app for production:
+```bash
+npm run build
+npm start
+```
+
 ## Tech Stack
 
 - **Frontend:** React, TypeScript, Tailwind CSS
