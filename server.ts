@@ -15,9 +15,10 @@ dotenv.config({ override: true });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const projectRoot = __dirname.endsWith('dist_server') ? path.join(__dirname, '..') : __dirname;
 
 // Database path from environment or default to local chat.db
-const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'chat.db');
+const dbPath = process.env.DATABASE_PATH || path.join(projectRoot, 'chat.db');
 const db = new Database(dbPath);
 
 // Target Admin Credentials from environment
@@ -654,14 +655,15 @@ app.delete('/admin/users/:id', authenticate, adminOnly, (req, res) => {
 });
 
 // Serve static files from the 'dist' directory
-app.use(express.static(path.join(__dirname, 'dist')));
+const distPath = path.join(projectRoot, 'dist');
+app.use(express.static(distPath));
 
 // API Routes (already defined)
 
 // Catch-all route to serve the frontend for any non-API request
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api') && !req.path.startsWith('/socket.io')) {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    res.sendFile(path.join(distPath, 'index.html'));
   }
 });
 
