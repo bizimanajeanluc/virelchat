@@ -101,21 +101,21 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               {mode !== 'verify' && (
                 <div className="relative group">
                   <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 group-focus-within:text-emerald-500 transition-colors" />
-                  <input type="text" placeholder="MOBILE NUMBER / GMAIL" required className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest uppercase" value={formData.identifier} onChange={e => setFormData({ ...formData, identifier: e.target.value })} />
+                  <input type="text" placeholder="MOBILE NUMBER / GMAIL" required className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest" value={formData.identifier} onChange={e => setFormData({ ...formData, identifier: e.target.value })} />
                 </div>
               )}
 
               {mode === 'signup' && (
                 <div className="relative group">
                   <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 group-focus-within:text-emerald-500 transition-colors" />
-                  <input type="text" placeholder="DISPLAY NAME" required className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest uppercase" value={formData.displayName} onChange={e => setFormData({ ...formData, displayName: e.target.value })} />
+                  <input type="text" placeholder="DISPLAY NAME" required className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest" value={formData.displayName} onChange={e => setFormData({ ...formData, displayName: e.target.value })} />
                 </div>
               )}
 
               {mode !== 'verify' && (
                 <div className="relative group">
                   <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 group-focus-within:text-emerald-500 transition-colors" />
-                  <input type="password" placeholder="ENCRYPTION KEY" required className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest uppercase" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} />
+                  <input type="password" placeholder="ENCRYPTION KEY" required className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} />
                 </div>
               )}
 
@@ -133,7 +133,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </div>
 
             <button type="submit" disabled={isLoading} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-6 rounded-[1.5rem] text-xs uppercase tracking-[0.4em] transition-all shadow-2xl shadow-emerald-900/40 active:scale-[0.98] disabled:opacity-50 mt-8 flex items-center justify-center gap-4 group">
-              {isLoading ? <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" /> : <>{mode === 'login' ? 'Establish Link' : mode === 'signup' ? 'Authorize' : 'Verify Identity'}<ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>}
+              {isLoading ? <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" /> : <>{mode === 'login' ? 'Login' : mode === 'signup' ? 'Authorize' : 'Verify Identity'}<ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>}
             </button>
 
             <div className="pt-6 border-t border-white/5 text-center">

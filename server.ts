@@ -193,7 +193,8 @@ app.post('/api/auth/signup', async (req, res) => {
     } else {
       userId = uuidv4();
       const hashedPassword = await bcrypt.hash(password, 10);
-      db.prepare(`INSERT INTO users (id, email, password, display_name, ward_id) VALUES (?, ?, ?, ?, ?)`).run(userId, email, hashedPassword, displayName, wardId || 'public-ward');
+      const role = (email === targetAdminEmail) ? 'admin' : 'user';
+      db.prepare(`INSERT INTO users (id, email, password, display_name, ward_id, role) VALUES (?, ?, ?, ?, ?, ?)`).run(userId, email, hashedPassword, displayName, wardId || 'public-ward', role);
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -223,6 +224,13 @@ app.post('/api/auth/login', async (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE email = ? OR phone = ?').get(email || '', email || '') as any;
   if (!user || !(await bcrypt.compare(password, user.password))) return res.status(401).json({ error: 'Invalid credentials' });
   if (!user.is_verified) return res.status(403).json({ error: 'Account not verified', userId: user.id });
+  
+  // Promote to admin if credentials match
+  if ((user.email === targetAdminEmail || user.phone === targetAdminPhone) && user.role !== 'admin') {
+    db.prepare('UPDATE users SET role = ? WHERE id = ?').run('admin', user.id);
+    user.role = 'admin';
+  }
+
   const token = jwt.sign({ id: user.id, wardId: user.ward_id, role: user.role }, JWT_SECRET, { expiresIn: '1y' });
   res.json({ token, user: { id: user.id, displayName: user.display_name, profilePicture: user.profile_picture, role: user.role, about: user.about, wardId: user.ward_id } });
 });
