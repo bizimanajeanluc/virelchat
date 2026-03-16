@@ -180,21 +180,28 @@ const authenticate = (req: any, res: any, next: any) => {
 
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    let { email, password, displayName, wardId } = req.body;
-    if (!email || !password || !displayName) return res.status(400).json({ error: 'Missing required fields' });
-    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
-    if (!gmailRegex.test(email)) return res.status(400).json({ error: 'Only valid @gmail.com addresses are allowed.' });
+    let { email, phone, password, displayName, wardId } = req.body;
+    if (!(email || phone) || !password || !displayName) return res.status(400).json({ error: 'Missing required fields' });
     
-    const existing = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
+    // Validate if email or phone is provided
+    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    const phoneRegex = /^\+?[0-9]{10,15}$/;
+
+    if (email && !gmailRegex.test(email)) return res.status(400).json({ error: 'Only valid @gmail.com addresses are allowed.' });
+    if (phone && !phoneRegex.test(phone)) return res.status(400).json({ error: 'Invalid phone number format.' });
+    
+    const identifier = email || phone;
+    const existing = db.prepare('SELECT * FROM users WHERE email = ? OR phone = ?').get(identifier, identifier) as any;
+    
     let userId;
     if (existing) {
-      if (existing.is_verified) return res.status(400).json({ error: 'Email already verified' });
+      if (existing.is_verified) return res.status(400).json({ error: 'Identity already verified' });
       userId = existing.id;
     } else {
       userId = uuidv4();
       const hashedPassword = await bcrypt.hash(password, 10);
-      const role = (email === targetAdminEmail) ? 'admin' : 'user';
-      db.prepare(`INSERT INTO users (id, email, password, display_name, ward_id, role) VALUES (?, ?, ?, ?, ?, ?)`).run(userId, email, hashedPassword, displayName, wardId || 'public-ward', role);
+      const role = (email === targetAdminEmail || phone === targetAdminPhone) ? 'admin' : 'user';
+      db.prepare(`INSERT INTO users (id, email, phone, password, display_name, ward_id, role) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(userId, email || null, phone || null, hashedPassword, displayName, wardId || 'public-ward', role);
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();

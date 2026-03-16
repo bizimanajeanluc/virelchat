@@ -32,7 +32,9 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     const idnt = formData.identifier.trim().toLowerCase();
 
     if (mode === 'signup') {
-      if (!validateGmail(idnt)) { setError('Signup requires a valid @gmail.com address.'); return; }
+      const isEmail = validateGmail(idnt);
+      const isPhone = validatePhone(idnt);
+      if (!isEmail && !isPhone) { setError('Signup requires a valid @gmail.com address or phone number.'); return; }
       if (!formData.displayName.trim()) { setError('Display name is required.'); return; }
     }
 
@@ -42,7 +44,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         const res = await api.post('/api/auth/login', { email: validateGmail(idnt) ? idnt : undefined, phone: !validateGmail(idnt) ? idnt : undefined, password: formData.password });
         onLogin(res.data.token, res.data.user);
       } else if (mode === 'signup') {
-        const res = await api.post('/api/auth/signup', { email: idnt, password: formData.password, displayName: formData.displayName.trim() });
+        const isEmail = validateGmail(idnt);
+        const res = await api.post('/api/auth/signup', { 
+          email: isEmail ? idnt : undefined, 
+          phone: !isEmail ? idnt : undefined, 
+          password: formData.password, 
+          displayName: formData.displayName.trim() 
+        });
         setUserId(res.data.userId);
         setMode('verify');
         setSuccessMessage(res.data.message + (res.data.code ? ` TEST CODE: ${res.data.code}` : ''));
