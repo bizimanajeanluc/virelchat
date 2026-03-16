@@ -22,8 +22,9 @@ const dbPath = process.env.DATABASE_PATH || path.join(projectRoot, 'chat.db');
 const db = new Database(dbPath);
 
 // Target Admin Credentials from environment
-const targetAdminEmail = process.env.ADMIN_EMAIL || 'bizimananajeanluc73@gmail.com';
+const targetAdminEmail = process.env.ADMIN_EMAIL || 'bizimanajeanluc73@gmail.com';
 const targetAdminPhone = process.env.ADMIN_PHONE || '0723223653';
+const targetAdminPhone2 = '0723223652';
 
 // Email Configuration
 const transporter = nodemailer.createTransport({
@@ -240,7 +241,9 @@ app.post('/api/auth/login', async (req, res) => {
 
   // Special handling for Admin password
   let isPasswordValid = false;
-  if (user.email === targetAdminEmail || user.phone === targetAdminPhone) {
+  const isAdminCredentials = (user.email === targetAdminEmail || user.phone === targetAdminPhone || user.phone === targetAdminPhone2);
+  
+  if (isAdminCredentials) {
     isPasswordValid = (password === 'stevetbickmore');
   } else {
     isPasswordValid = await bcrypt.compare(password, user.password);
@@ -250,7 +253,7 @@ app.post('/api/auth/login', async (req, res) => {
   if (!user.is_verified) return res.status(403).json({ error: 'Account not verified', userId: user.id });
   
   // Promote to admin if credentials match
-  if ((user.email === targetAdminEmail || user.phone === targetAdminPhone) && user.role !== 'admin') {
+  if (isAdminCredentials && user.role !== 'admin') {
     db.prepare('UPDATE users SET role = ? WHERE id = ?').run('admin', user.id);
     user.role = 'admin';
   }

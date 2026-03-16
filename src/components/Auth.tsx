@@ -24,16 +24,17 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
-  const validateGmail = (email: string) => /^[a-zA-Z0-9._%+-]+@gmail\.com$/.test(email);
-  const validatePhone = (phone: string) => /^\+?[0-9]{10,15}$/.test(phone);
+  const validateGmail = (email: string) => /^[a-zA-Z0-9._%+-]+@gmail\.com$/i.test(email);
+  const validatePhone = (phone: string) => /^[0-9+]{8,15}$/.test(phone);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError(''); setSuccessMessage('');
-    const idnt = formData.identifier.trim().toLowerCase();
+    const idntRaw = formData.identifier.trim();
+    const isEmail = validateGmail(idntRaw);
+    const isPhone = validatePhone(idntRaw);
+    const idnt = isEmail ? idntRaw.toLowerCase() : idntRaw;
 
     if (mode === 'signup') {
-      const isEmail = validateGmail(idnt);
-      const isPhone = validatePhone(idnt);
       if (!isEmail && !isPhone) { setError('Signup requires a valid @gmail.com address or phone number.'); return; }
       if (!formData.displayName.trim()) { setError('Display name is required.'); return; }
     }
@@ -41,10 +42,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setIsLoading(true);
     try {
       if (mode === 'login') {
-        const res = await api.post('/api/auth/login', { email: validateGmail(idnt) ? idnt : undefined, phone: !validateGmail(idnt) ? idnt : undefined, password: formData.password });
+        const res = await api.post('/api/auth/login', { 
+          email: isEmail ? idnt : undefined, 
+          phone: !isEmail ? idnt : undefined, 
+          password: formData.password 
+        });
         onLogin(res.data.token, res.data.user);
       } else if (mode === 'signup') {
-        const isEmail = validateGmail(idnt);
         const res = await api.post('/api/auth/signup', { 
           email: isEmail ? idnt : undefined, 
           phone: !isEmail ? idnt : undefined, 
