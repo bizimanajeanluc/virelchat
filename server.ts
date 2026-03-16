@@ -231,7 +231,7 @@ app.post('/api/auth/login', async (req, res) => {
     user.role = 'admin';
   }
 
-  const token = jwt.sign({ id: user.id, wardId: user.ward_id, role: user.role }, JWT_SECRET, { expiresIn: '1y' });
+  const token = jwt.sign({ id: user.id, wardId: user.ward_id, role: user.role }, secretToUse, { expiresIn: '1y' });
   res.json({ token, user: { id: user.id, displayName: user.display_name, profilePicture: user.profile_picture, role: user.role, about: user.about, wardId: user.ward_id } });
 });
 
@@ -422,7 +422,7 @@ io.on('connection', (socket) => {
   const token = socket.handshake.auth.token;
   if (!token) return socket.disconnect();
   try {
-    const user = jwt.verify(token, JWT_SECRET) as any;
+    const user = jwt.verify(token, secretToUse) as any;
     const userId = user.id;
     socket.join(`user:${userId}`);
     
