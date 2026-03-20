@@ -59,10 +59,15 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         setMode('verify');
         setSuccessMessage(res.data.message + (res.data.code ? ` TEST CODE: ${res.data.code}` : ''));
         setResendCooldown(60);
-      }
- else if (mode === 'verify') {
-        await api.post('/api/auth/verify', { userId, code: formData.code.trim() });
-        setMode('login'); setSuccessMessage('Identity verified. You may now establish a link.');
+      } else if (mode === 'verify') {
+        const res = await api.post('/api/auth/verify', { userId, code: formData.code.trim() });
+        // Auto-login on successful verification
+        if (res.data.token && res.data.user) {
+          onLogin(res.data.token, res.data.user);
+        } else {
+          setMode('login'); 
+          setSuccessMessage('Identity verified. You may now login.');
+        }
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Authentication sequence failed.');
@@ -70,12 +75,15 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     } finally { setIsLoading(false); }
   };
 
-  const handleResend = async () => {
-    if (resendCooldown > 0 || !userId) return;
-    setIsLoading(true);
-    try { await api.post('/api/auth/resend-code', { userId }); setSuccessMessage('New 6-digit token dispatched to your Gmail.'); setResendCooldown(60); }
-    catch (err: any) { setError(err.response?.data?.error || 'Resend failed.'); }
-    finally { setIsLoading(false); }
+  const handleIdentifierChange = (val: string) => {
+    // Force all characters to lowercase to ensure "small case" as requested.
+    // This handles the "I" becoming "i" case and ensures the default is always lowercase.
+    setFormData({ ...formData, identifier: val.toLowerCase() });
+  };
+
+  const handleDisplayNameChange = (val: string) => {
+    // Force lowercase for display name as well.
+    setFormData({ ...formData, displayName: val.toLowerCase() });
   };
 
   return (
@@ -105,29 +113,29 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <AnimatePresence mode="wait">
-              {error && <motion.div initial={{ opacity: 0, h: 0 }} animate={{ opacity: 1, h: 'auto' }} exit={{ opacity: 0, h: 0 }} className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-400"><AlertCircle size={18} className="shrink-0" /><p className="text-[11px] font-bold uppercase tracking-wider">{error}</p></motion.div>}
-              {successMessage && !error && <motion.div initial={{ opacity: 0, h: 0 }} animate={{ opacity: 1, h: 'auto' }} exit={{ opacity: 0, h: 0 }} className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-3 text-emerald-400"><CheckCircle2 size={18} className="shrink-0" /><p className="text-[11px] font-bold uppercase tracking-wider">{successMessage}</p></motion.div>}
+              {error && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-400"><AlertCircle size={18} className="shrink-0" /><p className="text-[11px] font-bold uppercase tracking-wider">{error}</p></motion.div>}
+              {successMessage && !error && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-3 text-emerald-400"><CheckCircle2 size={18} className="shrink-0" /><p className="text-[11px] font-bold uppercase tracking-wider">{successMessage}</p></motion.div>}
             </AnimatePresence>
 
             <div className="space-y-4">
               {mode !== 'verify' && (
                 <div className="relative group">
                   <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 group-focus-within:text-emerald-500 transition-colors" />
-                  <input type="text" placeholder="MOBILE NUMBER / GMAIL" required className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest" value={formData.identifier} onChange={e => setFormData({ ...formData, identifier: e.target.value })} />
+                  <input type="text" placeholder="MOBILE NUMBER / GMAIL" required autoCapitalize="none" autoCorrect="off" spellCheck="false" className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest" value={formData.identifier} onChange={e => handleIdentifierChange(e.target.value)} />
                 </div>
               )}
 
               {mode === 'signup' && (
                 <div className="relative group">
                   <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 group-focus-within:text-emerald-500 transition-colors" />
-                  <input type="text" placeholder="DISPLAY NAME" required className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest" value={formData.displayName} onChange={e => setFormData({ ...formData, displayName: e.target.value })} />
+                  <input type="text" placeholder="DISPLAY NAME" required autoCapitalize="none" autoCorrect="off" spellCheck="false" className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest" value={formData.displayName} onChange={e => handleDisplayNameChange(e.target.value)} />
                 </div>
               )}
 
               {mode !== 'verify' && (
                 <div className="relative group">
                   <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 group-focus-within:text-emerald-500 transition-colors" />
-                  <input type="password" placeholder="ENCRYPTION KEY" required className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} />
+                  <input type="password" placeholder="ENCRYPTION KEY" required autoCapitalize="none" autoCorrect="off" spellCheck="false" className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value.toLowerCase() })} />
                 </div>
               )}
 

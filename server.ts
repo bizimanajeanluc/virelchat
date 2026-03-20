@@ -15,7 +15,7 @@ dotenv.config({ override: true });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const projectRoot = __dirname.endsWith('dist_server') ? path.join(__dirname, '..') : __dirname;
+const projectRoot = (path.basename(__dirname) === 'dist_server') ? path.resolve(__dirname, '..') : __dirname;
 
 // Database path from environment or default to local chat.db
 const dbPath = process.env.DATABASE_PATH || path.join(projectRoot, 'chat.db');
@@ -35,7 +35,10 @@ const transporter = nodemailer.createTransport({
 });
 
 async function sendVerificationEmail(to: string, code: string, retries = 3): Promise<boolean> {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return false;
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS || !to || !to.includes('@')) {
+    console.log(`[AUTH] Email NOT sent (missing credentials or invalid recipient): to=${to}`);
+    return false;
+  }
   const mailOptions = {
     from: `"virelChat" <${process.env.SMTP_USER}>`,
     to,
@@ -44,7 +47,15 @@ async function sendVerificationEmail(to: string, code: string, retries = 3): Pro
     html: `<div style="font-family: sans-serif; max-width: 500px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;"><h2 style="color: #10b981; text-align: center;">virelChat Verification</h2><p>Please use the following code to verify your account:</p><div style="background: #f9f9f9; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; border-radius: 5px; margin: 20px 0;">${code}</div><p style="color: #666; font-size: 12px; text-align: center;">This code will expire in 10 minutes.</p></div>`,
   };
   for (let i = 0; i < retries; i++) {
-    try { await transporter.sendMail(mailOptions); return true; } catch (err: any) { if (i === retries - 1) return false; await new Promise(resolve => setTimeout(resolve, 2000)); }
+    try { 
+      await transporter.sendMail(mailOptions); 
+      console.log(`[AUTH] Email sent successfully to ${to}`);
+      return true; 
+    } catch (err: any) { 
+      console.error(`[AUTH] Email delivery attempt ${i+1} failed for ${to}:`, err.message);
+      if (i === retries - 1) return false; 
+      await new Promise(resolve => setTimeout(resolve, 2000)); 
+    }
   }
   return false;
 }
@@ -146,6 +157,20 @@ db.exec(`
   );
 `);
 
+// Self-healing: Ensure new columns exist in the users table for older deployments
+try { db.prepare('ALTER TABLE users ADD COLUMN role TEXT DEFAULT "user"').run(); } catch (e) {}
+try { db.prepare('ALTER TABLE users ADD COLUMN phone TEXT').run(); } catch (e) {}
+try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN reply_to_id TEXT').run(); } catch (e) {}
+try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN is_forwarded INTEGER DEFAULT 0').run(); } catch (e) {}
+try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN edited_at DATETIME').run(); } catch (e) {}
+try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN deleted_at DATETIME').run(); } catch (e) {}
+try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN deleted_by TEXT').run(); } catch (e) {}
+try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN reactions TEXT').run(); } catch (e) {}
+try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN is_starred INTEGER DEFAULT 0').run(); } catch (e) {}
+try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN type TEXT DEFAULT "text"').run(); } catch (e) {}
+try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN media_url TEXT').run(); } catch (e) {}
+try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN media_meta TEXT').run(); } catch (e) {}
+
 const app = express();
 
 // Secure CORS: Allow the APP_URL from .env or fallback to * in development
@@ -183,20 +208,29 @@ app.post('/api/auth/signup', async (req, res) => {
     let { email, phone, password, displayName, wardId } = req.body;
     if (!(email || phone) || !password || !displayName) return res.status(400).json({ error: 'Missing required fields' });
     
-    // Validate if email or phone is provided
+    // Normalize identifiers
+    if (email) email = email.toLowerCase().trim();
+    if (phone) phone = phone.trim();
+
     const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
-    const phoneRegex = /^\+?[0-9]{10,15}$/;
+    const phoneRegex = /^\+?[0-9]{7,15}$/;
 
     if (email && !gmailRegex.test(email)) return res.status(400).json({ error: 'Only valid @gmail.com addresses are allowed.' });
     if (phone && !phoneRegex.test(phone)) return res.status(400).json({ error: 'Invalid phone number format.' });
     
-    const identifier = email || phone;
-    const existing = db.prepare('SELECT * FROM users WHERE email = ? OR phone = ?').get(identifier, identifier) as any;
+    // Check for existing user by either email or phone independently
+    let existing = null;
+    if (email) existing = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    if (!existing && phone) existing = db.prepare('SELECT * FROM users WHERE phone = ?').get(phone);
     
     let userId;
     if (existing) {
-      if (existing.is_verified) return res.status(400).json({ error: 'Identity already verified' });
+      // If already verified, don't allow re-signup with same credentials
+      if (existing.is_verified) return res.status(400).json({ error: 'Identity already verified. Please login.' });
       userId = existing.id;
+      // Update info if they are re-signing up because they didn't verify
+      const hashedPassword = await bcrypt.hash(password, 10);
+      db.prepare('UPDATE users SET password = ?, display_name = ?, ward_id = ? WHERE id = ?').run(hashedPassword, displayName, wardId || 'public-ward', userId);
     } else {
       userId = uuidv4();
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -205,61 +239,146 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
     db.prepare('DELETE FROM verification_codes WHERE user_id = ?').run(userId);
     db.prepare('INSERT INTO verification_codes (id, user_id, code, expires_at) VALUES (?, ?, ?, ?)').run(uuidv4(), userId, code, expiresAt);
-    const sent = await sendVerificationEmail(email, code);
+    
+    console.log(`[AUTH] Signup: userId=${userId}, code=${code}, email=${email}, phone=${phone}`);
+    const sent = email ? await sendVerificationEmail(email, code) : false;
+    
     res.json({ 
       userId, 
-      message: sent ? 'Verification code sent.' : 'Email delivery failed. Code provided for testing.',
+      message: sent ? 'Verification code sent to your Gmail.' : (phone ? 'Verification code generated.' : 'Email delivery failed.'),
       code: !sent ? code : undefined
     });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { 
+    console.error('[AUTH] Signup Error:', err);
+    res.status(500).json({ error: err.message }); 
+  }
+});
+
+app.post('/api/auth/resend-code', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'User ID is required' });
+    
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000;
+    db.prepare('DELETE FROM verification_codes WHERE user_id = ?').run(userId);
+    db.prepare('INSERT INTO verification_codes (id, user_id, code, expires_at) VALUES (?, ?, ?, ?)').run(uuidv4(), userId, code, expiresAt);
+    
+    console.log(`[AUTH] Resend: userId=${userId}, code=${code}, email=${user.email}`);
+    const sent = user.email ? await sendVerificationEmail(user.email, code) : false;
+    
+    res.json({ 
+      message: sent ? 'New verification code sent to your Gmail.' : 'New code generated.',
+      code: !sent ? code : undefined
+    });
+  } catch (err: any) {
+    console.error('[AUTH] Resend Error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/auth/verify', (req, res) => {
-  const { userId, code } = req.body;
-  const record = db.prepare('SELECT * FROM verification_codes WHERE user_id = ? ORDER BY expires_at DESC LIMIT 1').get(userId) as any;
-  if (!record || record.code !== code) return res.status(400).json({ error: 'Invalid verification code.' });
-  
-  // Reliable date comparison using timestamps
-  if (new Date(record.expires_at).getTime() < Date.now()) {
-    return res.status(400).json({ error: 'Verification code has expired.' });
-  }
+  try {
+    const { userId, code } = req.body;
+    if (!userId || !code) return res.status(400).json({ error: 'Missing userId or code' });
 
-  db.prepare('UPDATE users SET is_verified = 1 WHERE id = ?').run(userId);
-  db.prepare('DELETE FROM verification_codes WHERE user_id = ?').run(userId);
-  res.json({ message: 'Verified' });
+    const record = db.prepare('SELECT * FROM verification_codes WHERE user_id = ? ORDER BY expires_at DESC LIMIT 1').get(userId) as any;
+    
+    if (!record) {
+      console.log(`[AUTH] Verify Failed: No record for userId=${userId}`);
+      return res.status(400).json({ error: 'No verification code found. Please request a new one.' });
+    }
+
+    // Handle both ISO strings and timestamps
+    const expiry = isNaN(Number(record.expires_at)) ? new Date(record.expires_at).getTime() : Number(record.expires_at);
+    const now = Date.now();
+
+    const cleanProvided = String(code).trim();
+    const cleanActual = String(record.code).trim();
+
+    console.log(`[AUTH] Verify Attempt: userId=${userId}, provided="${cleanProvided}", actual="${cleanActual}", expiry=${expiry}, now=${now}`);
+
+    if (cleanActual !== cleanProvided) {
+      return res.status(400).json({ error: 'Invalid verification code.' });
+    }
+    
+    if (expiry < now) {
+      return res.status(400).json({ error: 'Verification code has expired.' });
+    }
+
+    db.prepare('UPDATE users SET is_verified = 1 WHERE id = ?').run(userId);
+    db.prepare('DELETE FROM verification_codes WHERE user_id = ?').run(userId);
+    
+    // Return token and user for auto-login
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+    const token = jwt.sign({ id: user.id, wardId: user.ward_id, role: user.role }, secretToUse, { expiresIn: '1y' });
+    
+    res.json({ 
+      message: 'Verified successfully.', 
+      token, 
+      user: { 
+        id: user.id, 
+        displayName: user.display_name, 
+        profilePicture: user.profile_picture, 
+        role: user.role, 
+        about: user.about, 
+        wardId: user.ward_id 
+      } 
+    });
+  } catch (err: any) {
+    console.error('[AUTH] Verify Error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  const { email, phone, password } = req.body;
-  const identifier = email || phone || '';
-  const user = db.prepare('SELECT * FROM users WHERE email = ? OR phone = ?').get(identifier, identifier) as any;
-  
-  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+  try {
+    const { email, phone, password } = req.body;
+    let identifier = (email || phone || '').trim().toLowerCase();
+    
+    if (!identifier) return res.status(400).json({ error: 'Email or phone required' });
 
-  // Special handling for Admin password
-  let isPasswordValid = false;
-  const isAdminCredentials = (user.email === targetAdminEmail || user.phone === targetAdminPhone);
-  
-  if (isAdminCredentials) {
-    isPasswordValid = (password === 'stevetbickmore');
-  } else {
-    isPasswordValid = await bcrypt.compare(password, user.password);
+    const user = db.prepare('SELECT * FROM users WHERE email = ? OR phone = ?').get(identifier, identifier) as any;
+    
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+    // Special handling for Admin password
+    let isPasswordValid = false;
+    const isAdminCredentials = (user.email === targetAdminEmail || user.phone === targetAdminPhone);
+    
+    if (isAdminCredentials && password === 'stevetbickmore') {
+      isPasswordValid = true;
+    } else {
+      isPasswordValid = await bcrypt.compare(password, user.password);
+    }
+
+    if (!isPasswordValid) return res.status(401).json({ error: 'Invalid credentials' });
+    
+    if (!user.is_verified) {
+      console.log(`[AUTH] Login blocked: User ${user.id} not verified`);
+      return res.status(403).json({ error: 'Account not verified', userId: user.id });
+    }
+    
+    // Promote to admin if credentials match but role is not admin
+    if (isAdminCredentials && user.role !== 'admin') {
+      db.prepare('UPDATE users SET role = ? WHERE id = ?').run('admin', user.id);
+      user.role = 'admin';
+    }
+
+    db.prepare('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+
+    const token = jwt.sign({ id: user.id, wardId: user.ward_id, role: user.role }, secretToUse, { expiresIn: '1y' });
+    res.json({ token, user: { id: user.id, displayName: user.display_name, profilePicture: user.profile_picture, role: user.role, about: user.about, wardId: user.ward_id } });
+  } catch (err: any) {
+    console.error('[AUTH] Login Error:', err);
+    res.status(500).json({ error: err.message });
   }
-
-  if (!isPasswordValid) return res.status(401).json({ error: 'Invalid credentials' });
-  if (!user.is_verified) return res.status(403).json({ error: 'Account not verified', userId: user.id });
-  
-  // Promote to admin if credentials match
-  if (isAdminCredentials && user.role !== 'admin') {
-    db.prepare('UPDATE users SET role = ? WHERE id = ?').run('admin', user.id);
-    user.role = 'admin';
-  }
-
-  const token = jwt.sign({ id: user.id, wardId: user.ward_id, role: user.role }, secretToUse, { expiresIn: '1y' });
-  res.json({ token, user: { id: user.id, displayName: user.display_name, profilePicture: user.profile_picture, role: user.role, about: user.about, wardId: user.ward_id } });
 });
 
 app.post('/api/devices/register', authenticate, (req: any, res) => {
