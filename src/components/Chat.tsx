@@ -683,74 +683,45 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
         )}
         <div 
           onClick={(e) => {
-            // For mobile/touch users, open menu on click
             if (window.innerWidth < 768) {
               setMenuConfig({ msg, x: e.clientX, y: e.clientY, type: 'context' });
             }
           }}
           onContextMenu={(e) => { e.preventDefault(); setMenuConfig({ msg, x: e.clientX, y: e.clientY, type: 'context' }); }}
-          className={`p-2 px-3 rounded-lg shadow-sm min-w-[80px] flex flex-col relative text-[14.5px] transition-all ${msg.isMe ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-slate-200 rounded-tl-none'} max-w-[85%] sm:max-w-[75%] md:max-w-[70%] lg:max-w-[60%] overflow-wrap-anywhere`}
+          className={`p-2 px-3 rounded-lg shadow-sm min-w-[85px] flex flex-col relative text-[14px] leading-[1.4] transition-all ${msg.isMe ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-slate-200 rounded-tl-none'} max-w-[88%] sm:max-w-[75%] md:max-w-[70%] overflow-wrap-anywhere`}
         >
           {!msg.isMe && (
-            <span className="text-[11px] font-black uppercase tracking-widest text-emerald-500 mb-1 block">
+            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500 mb-0.5 block">
               {msg.sender_name || activeConv.other_name}
             </span>
           )}
-          {replyMsg && (
-            <div 
-              onClick={(e) => {
-                e.stopPropagation();
-                const el = document.getElementById(`msg-${replyMsg.messageGroupId || replyMsg.message_group_id}`);
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }}
-              className="mb-2 p-2 bg-black/20 border-l-4 border-emerald-500 rounded flex flex-col gap-1 cursor-pointer hover:bg-black/30 transition-colors"
-            >
-              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">{replyMsg.isMe ? 'You' : (replyMsg.sender_name || activeConv.other_name)}</span>
-              <p className="text-[12px] text-slate-400 truncate leading-tight">{replyMsg.text || (replyMsg.type === 'image' ? '📷 Photo' : replyMsg.type === 'audio' ? '🎵 Voice Note' : '📄 Document')}</p>
-            </div>
-          )}
-          <AnimatePresence>{hoveredMsgId === msg.id && !menuConfig && !msg.isDeleted && (
-            <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} className={`absolute top-1 z-10 flex items-center gap-1 ${msg.isMe ? '-left-20 flex-row-reverse' : '-right-20'}`}>
-              <button onClick={(e) => setMenuConfig({ msg, x: e.clientX, y: e.clientY, type: 'context' })} className="p-1.5 bg-[#202c33] rounded-full text-slate-400 hover:text-white shadow-lg border border-white/5"><ChevronDown className="w-4 h-4" /></button>
-              <button onClick={(e) => setMenuConfig({ msg, x: e.clientX, y: e.clientY, type: 'reactions' })} className="p-1.5 bg-[#202c33] rounded-full text-slate-400 hover:text-white shadow-lg border border-white/5"><Smile className="w-4 h-4" /></button>
-              <button onClick={() => setReplyingTo(msg)} className="p-1.5 bg-[#202c33] rounded-full text-slate-400 hover:text-white shadow-lg border border-white/5"><Reply className="w-4 h-4" /></button>
-            </motion.div>
-          )}</AnimatePresence>
-          {msg.isDeleted ? ( <p className="italic text-slate-400 flex items-center gap-2"><Ban className="w-3.5 h-3.5" /> This message was deleted</p> ) : msg.decryptionError ? (
-            <div className="flex flex-col gap-2 p-1">
-              <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-widest">
-                <Lock className="w-3.5 h-3.5" />
-                <span>Message Encrypted</span>
+          {/* Content */}
+          <div className="pr-2">
+            {msg.isDeleted ? ( <p className="italic text-slate-400 flex items-center gap-2 text-[13px]"><Ban className="w-3 h-3" /> This message was deleted</p> ) : msg.decryptionError ? (
+              <div className="flex flex-col gap-2 p-1">
+                <div className="flex items-center gap-2 text-amber-400 font-bold text-[10px] uppercase tracking-widest"><Lock className="w-3 h-3" /><span>Encrypted</span></div>
+                <button onClick={() => fetchMessages(activeConv.id)} className="text-[9px] font-black uppercase text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded">Sync Registry</button>
               </div>
-              <p className="text-[12px] text-slate-400 leading-relaxed italic">
-                {msg.decryptionError.error === 'KEY_MISSING' ? "Waiting for sender's identity keys. This may take a moment." : 
-                 msg.decryptionError.error === 'DEVICE_MISSING' ? "Message from an unregistered device. Transmission blocked." :
-                 "This message is currently locked. Ensure your cryptographic registry is synced."}
-              </p>
-              <button onClick={() => fetchMessages(activeConv.id)} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-500 hover:text-emerald-400 transition-colors w-fit bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20">
-                <RefreshCw className="w-3 h-3" />
-                Sync Registry
-              </button>
-            </div>
-          ) : (
-            <>{msg.type === 'image' && msg.media_url && <img src={msg.media_url} className="rounded-lg mb-1 max-w-full h-auto max-h-[300px] object-cover" />}
-              {msg.type === 'audio' && msg.media_url && (
-                <div className="flex items-center gap-3 min-w-[200px] pb-1">
-                  <button onClick={() => toggleAudioPlay(msg.id)} className="w-10 h-10 rounded-full bg-slate-400/20 flex items-center justify-center hover:bg-slate-400/30 transition-colors">{playingAudioId === msg.id ? <Pause size={20} /> : <Play size={20} />}</button>
-                  <div className="flex-1 flex flex-col gap-1"><div className="h-1 bg-slate-500/30 rounded-full overflow-hidden w-full"><div className={`h-full bg-white transition-all duration-200 ${playingAudioId === msg.id ? 'w-full' : 'w-0'}`} /></div><span className="text-[10px] text-slate-400 font-mono">{playingAudioId === msg.id ? 'Playing...' : 'Voice Note'}</span></div>
-                  <audio ref={el => { if (el) audioRefs.current[msg.id] = el; }} src={msg.media_url} onEnded={() => setPlayingAudioId(null)} className="hidden" /><Mic size={16} />
-                </div>
-              )}
-              {msg.type === 'document' && msg.media_url && ( <a href={msg.media_url} download={JSON.parse(msg.media_meta || '{}').name || 'Document'} className="flex items-center gap-3 bg-black/20 p-3 rounded-lg hover:bg-black/30 transition-colors mb-1"><div className="bg-indigo-500/20 p-2 rounded-lg"><File size={24} /></div><div className="flex-1 min-w-0 font-bold text-sm truncate">{JSON.parse(msg.media_meta || '{}').name || 'Document'}</div><Download size={20} /></a> )}
-              {msg.text && (msg.type === 'text' || !msg.type) && <p className="whitespace-pre-wrap break-words">{msg.text}</p>}</>
-          )}
-          <div className="flex items-center justify-end gap-1 mt-1 shrink-0 ml-4">
-            {msg.isStarred === 1 && <Star className="w-3 h-3 text-yellow-500 fill-yellow-500 mr-0.5" />}
-            <span className="text-[10px] opacity-60 font-medium">{safeFormatTime(msg.created_at)}</span>
+            ) : (
+              <>{msg.type === 'image' && msg.media_url && <img src={msg.media_url} className="rounded-lg mb-1 max-w-full h-auto max-h-[300px] object-cover" />}
+                {msg.type === 'audio' && msg.media_url && (
+                  <div className="flex items-center gap-2 min-w-[180px] pb-1">
+                    <button onClick={() => toggleAudioPlay(msg.id)} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">{playingAudioId === msg.id ? <Pause size={16} /> : <Play size={16} />}</button>
+                    <div className="flex-1 h-1 bg-white/10 rounded-full"><div className={`h-full bg-white rounded-full ${playingAudioId === msg.id ? 'w-full' : 'w-0'}`} /></div>
+                    <Mic size={14} className="text-slate-400" />
+                  </div>
+                )}
+                {msg.text && (msg.type === 'text' || !msg.type) && <p className="whitespace-pre-wrap break-words">{msg.text}</p>}</>
+            )}
+          </div>
+          {/* Metadata: Time and Checkmarks */}
+          <div className="flex items-center justify-end gap-1 mt-0.5 self-end ml-auto">
+            {msg.isStarred === 1 && <Star className="w-2.5 h-2.5 text-yellow-500 fill-yellow-500" />}
+            <span className="text-[9px] opacity-60 font-medium">{safeFormatTime(msg.created_at)}</span>
             {msg.isMe && (
-              msg.read ? <CheckCheck className="w-4 h-4 text-[#53bdeb] stroke-[3px]" /> : 
-              msg.delivered ? <CheckCheck className="w-4 h-4 text-slate-400 stroke-[2.5px]" /> : 
-              <Check className="w-4 h-4 text-slate-400 stroke-[2.5px]" />
+              msg.read ? <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb] stroke-[3px]" /> : 
+              msg.delivered ? <CheckCheck className="w-3.5 h-3.5 text-slate-400 stroke-[2.5px]" /> : 
+              <Check className="w-3.5 h-3.5 text-slate-400 stroke-[2.5px]" />
             )}
           </div>
         </div>
@@ -878,33 +849,26 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
       <div id="messaging-area" className={`flex flex-col h-full bg-[#0b141a] relative transition-all duration-200 ease-in-out z-20 flex-1 ${activeConv ? 'flex' : 'hidden md:flex items-center justify-center bg-[#222e35]'}`}>
         {activeConv ? (
           <>
-            <div className="bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 p-3 h-16 flex items-center justify-between shrink-0 z-10">
-              <div className="flex items-center gap-3 min-w-0 cursor-pointer flex-1" onClick={() => setShowContactInfo(true)}>
-                <button onClick={() => setActiveConv(null)} className="md:hidden p-2 -ml-2 text-slate-400 hover:text-emerald-500 transition-colors"><ArrowLeft size={20} /></button>
+            <div className="bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 p-2 h-16 flex items-center justify-between shrink-0 z-10 gap-1">
+              <div className="flex items-center gap-2 min-w-0 cursor-pointer flex-1" onClick={() => setShowContactInfo(true)}>
+                <button onClick={(e) => { e.stopPropagation(); setActiveConv(null); }} className="md:hidden p-1.5 -ml-1 text-slate-400 hover:text-emerald-500 shrink-0"><ArrowLeft size={20} /></button>
                 <div className="relative shrink-0">
-                  <div className="w-10 h-10 rounded-full bg-slate-800 overflow-hidden shrink-0">{(activeConv.other_profile_picture && !activeConv.is_blocked_by_me && !activeConv.has_blocked_me) ? <img src={activeConv.other_profile_picture} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-800 flex items-center justify-center font-bold text-slate-500">{activeConv.other_name[0]}</div>}</div>
-                  {onlineUsers.has(activeConv.other_id) && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-[#020617] shadow-[0_0_8px_#10b981]" />}
+                  <div className="w-9 h-9 rounded-full bg-slate-800 overflow-hidden shrink-0">{(activeConv.other_profile_picture && !activeConv.is_blocked_by_me && !activeConv.has_blocked_me) ? <img src={activeConv.other_profile_picture} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-800 flex items-center justify-center font-bold text-slate-500 text-xs">{activeConv.other_name[0]}</div>}</div>
+                  {onlineUsers.has(activeConv.other_id) && <div className="absolute bottom-0 right-0 w-2 h-2 bg-emerald-500 rounded-full border-2 border-[#020617] shadow-[0_0_8px_#10b981]" />}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h2 className="font-bold text-slate-100 truncate text-sm flex items-center gap-2">
+                  <h2 className="font-bold text-slate-100 truncate text-[13px] leading-tight">
                     {activeConv.other_name}
-                    {onlineUsers.has(activeConv.other_id) && <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />}
                   </h2>
-                  <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider truncate">
-                    {typingUsers[activeConv.other_id] ? 'Typing...' : (onlineUsers.has(activeConv.other_id) ? 'Online' : lastSeenMap[activeConv.other_id] ? `Last seen ${formatLastSeen(lastSeenMap[activeConv.other_id])}` : 'Offline')}
+                  <p className="text-[9px] text-emerald-500 font-bold uppercase tracking-wider truncate">
+                    {typingUsers[activeConv.other_id] ? 'Typing...' : (onlineUsers.has(activeConv.other_id) ? 'Online' : 'Offline')}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                {auditService.getIssueCount() > 0 && (
-                  <button onClick={() => setShowDiagnosticReport(true)} className="p-2 text-amber-500 animate-pulse bg-amber-500/10 rounded-full" title="Issues Detected">
-                    <AlertTriangle size={20} />
-                  </button>
-                )}
-                <button onClick={() => setShowBgPicker(true)} className="p-2.5 text-slate-400 hover:text-emerald-400" title="Change Background"><Grid size={20} /></button>
-                <button onClick={() => startCall('audio')} className={`p-2.5 rounded-xl transition-all ${activeConv.is_blocked_by_me || activeConv.has_blocked_me ? 'opacity-50 cursor-not-allowed' : 'text-slate-400 hover:text-emerald-400'}`} disabled={activeConv.is_blocked_by_me || activeConv.has_blocked_me}><Phone size={20} /></button>
-                <button onClick={() => startCall('video')} className={`p-2.5 rounded-xl transition-all ${activeConv.is_blocked_by_me || activeConv.has_blocked_me ? 'opacity-50 cursor-not-allowed' : 'text-slate-400 hover:text-emerald-400'}`} disabled={activeConv.is_blocked_by_me || activeConv.has_blocked_me}><Video size={20} /></button>
-                <button onClick={() => setShowContactInfo(!showContactInfo)} className="p-2.5 text-slate-400"><MoreVertical size={20} /></button>
+              <div className="flex items-center gap-0.5 shrink-0">
+                <button onClick={() => startCall('audio')} className={`p-2 rounded-xl transition-all shrink-0 ${activeConv.is_blocked_by_me || activeConv.has_blocked_me ? 'opacity-30 cursor-not-allowed' : 'text-slate-400 hover:text-emerald-400'}`} disabled={activeConv.is_blocked_by_me || activeConv.has_blocked_me}><Phone size={18} /></button>
+                <button onClick={() => startCall('video')} className={`p-2 rounded-xl transition-all shrink-0 ${activeConv.is_blocked_by_me || activeConv.has_blocked_me ? 'opacity-30 cursor-not-allowed' : 'text-slate-400 hover:text-emerald-400'}`} disabled={activeConv.is_blocked_by_me || activeConv.has_blocked_me}><Video size={18} /></button>
+                <button onClick={() => setShowContactInfo(!showContactInfo)} className="p-2 text-slate-400 shrink-0"><MoreVertical size={18} /></button>
               </div>
             </div>
             {/* Dynamic Chat Area: Uses flex-col-reverse for bottom anchoring */}
