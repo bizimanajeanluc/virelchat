@@ -18,7 +18,11 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://virelchat-production.up.railway.app/" />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" href="https://picsum.photos/seed/virelchat/32/32" />
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -40,6 +44,34 @@
         "Private Communities"
       ]
     }
+    </script>
+    <script>
+      // Register Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then(reg => console.log('Service Worker registered', reg))
+            .catch(err => console.error('Service Worker registration failed', err));
+        });
+      }
+
+      // Handle PWA Install Prompt
+      let deferredPrompt;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        // Prevent Chrome 67 and earlier from automatically showing the prompt
+        e.preventDefault();
+        // Stash the event so it can be triggered later.
+        deferredPrompt = e;
+        console.log('PWA Install prompt saved');
+        
+        // Optional: Show your own custom install button here if you want
+        // For example: document.getElementById('install-btn').style.display = 'block';
+      });
+
+      window.addEventListener('appinstalled', (evt) => {
+        console.log('VirelChat was installed');
+        deferredPrompt = null;
+      });
     </script>
   </head>
   <body>

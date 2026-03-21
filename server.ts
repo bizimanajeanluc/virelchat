@@ -478,7 +478,13 @@ app.get('/api/conversations', authenticate, (req: any, res) => {
 
 app.get('/api/conversations/:id/messages', authenticate, (req: any, res) => {
   const { id } = req.params; const { deviceId } = req.query;
-  const messages = db.prepare(`SELECT * FROM encrypted_messages WHERE conversation_id = ? AND recipient_device_id = ? ORDER BY created_at ASC`).all(id, deviceId);
+  const messages = db.prepare(`
+    SELECT m.*, u.display_name as sender_name, u.profile_picture as sender_profile_picture 
+    FROM encrypted_messages m
+    JOIN users u ON m.sender_id = u.id
+    WHERE m.conversation_id = ? AND m.recipient_device_id = ? 
+    ORDER BY m.created_at ASC
+  `).all(id, deviceId);
   res.json(messages);
 });
 
@@ -612,6 +618,7 @@ io.on('connection', (socket) => {
       const isBlocked = db.prepare('SELECT 1 FROM blocked_users WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)').get(userId, recipientId, recipientId, userId);
       if (isBlocked && user.role !== 'admin') return;
       
+      const senderInfo = db.prepare('SELECT display_name, profile_picture FROM users WHERE id = ?').get(userId) as any;
       const recipientDevices = db.prepare('SELECT id FROM devices WHERE user_id = ?').all(recipientId) as any[];
       const senderDevices = db.prepare('SELECT id FROM devices WHERE user_id = ?').all(userId) as any[];
 
@@ -625,7 +632,9 @@ io.on('connection', (socket) => {
           const messageData = { 
             id: uuidv4(), messageGroupId, conversationId, senderId: userId, recipientId, recipientDeviceId: device.id, 
             payload: JSON.stringify(payload), replyToId, created_at: new Date().toISOString(),
-            delivered: isRecipientOnline ? 1 : 0
+            delivered: isRecipientOnline ? 1 : 0,
+            sender_name: senderInfo?.display_name,
+            sender_profile_picture: senderInfo?.profile_picture
           };
           
           io.to(`user:${recipientId}`).emit('message_received', messageData);
@@ -644,7 +653,9 @@ io.on('connection', (socket) => {
           // Emit to other devices of the sender
           socket.to(`user:${userId}`).emit('message_sent', {
             messageGroupId, conversationId, senderId: userId, recipientId, recipientDeviceId: device.id,
-            payload: JSON.stringify(payload), replyToId, created_at: new Date().toISOString()
+            payload: JSON.stringify(payload), replyToId, created_at: new Date().toISOString(),
+            sender_name: senderInfo?.display_name,
+            sender_profile_picture: senderInfo?.profile_picture
           });
         }
       }
@@ -662,6 +673,7 @@ io.on('connection', (socket) => {
     socket.on('send_media', (data) => {
       const { conversationId, recipientId, type, mediaUrl, mediaMeta, payloads, messageGroupId, replyToId } = data;
       
+      const senderInfo = db.prepare('SELECT display_name, profile_picture FROM users WHERE id = ?').get(userId) as any;
       const recipientDevices = db.prepare('SELECT id FROM devices WHERE user_id = ?').all(recipientId) as any[];
       const senderDevices = db.prepare('SELECT id FROM devices WHERE user_id = ?').all(userId) as any[];
 
@@ -675,7 +687,9 @@ io.on('connection', (socket) => {
             id: uuidv4(), messageGroupId, conversationId, senderId: userId, recipientDeviceId: device.id, 
             payload: JSON.stringify(payload), type, mediaUrl, mediaMeta: JSON.stringify(mediaMeta), 
             replyToId, created_at: new Date().toISOString(),
-            delivered: isRecipientOnline ? 1 : 0
+            delivered: isRecipientOnline ? 1 : 0,
+            sender_name: senderInfo?.display_name,
+            sender_profile_picture: senderInfo?.profile_picture
           };
 
           io.to(`user:${recipientId}`).emit('message_received', messageData);
@@ -691,7 +705,9 @@ io.on('connection', (socket) => {
           db.prepare('INSERT INTO encrypted_messages (id, message_group_id, conversation_id, sender_id, recipient_device_id, payload, type, media_url, media_meta, reply_to_id, read, delivered) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)').run(uuidv4(), messageGroupId, conversationId, userId, device.id, JSON.stringify(payload), type, mediaUrl, JSON.stringify(mediaMeta), replyToId || null);
           
           socket.to(`user:${userId}`).emit('message_sent', {
-            messageGroupId, conversationId, senderId: userId, type, mediaUrl, mediaMeta: JSON.stringify(mediaMeta), replyToId, created_at: new Date().toISOString()
+            messageGroupId, conversationId, senderId: userId, type, mediaUrl, mediaMeta: JSON.stringify(mediaMeta), replyToId, created_at: new Date().toISOString(),
+            sender_name: senderInfo?.display_name,
+            sender_profile_picture: senderInfo?.profile_picture
           });
         }
       }

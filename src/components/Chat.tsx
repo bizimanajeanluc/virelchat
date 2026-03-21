@@ -258,7 +258,15 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
           
           if (activeConvRef.current?.id === msg.conversationId || activeConvRef.current?.id === msg.conversation_id) {
             if (!isMe) markAsRead(activeConvRef.current.id);
-            return [...prev, { ...msg, id: msg.id || msg.messageGroupId, text: decrypted, isMe, created_at: msg.created_at || new Date().toISOString() }];
+            return [...prev, { 
+              ...msg, 
+              id: msg.id || msg.messageGroupId, 
+              text: decrypted, 
+              isMe, 
+              sender_name: msg.sender_name,
+              sender_profile_picture: msg.sender_profile_picture,
+              created_at: msg.created_at || new Date().toISOString() 
+            }];
           }
           return prev;
         });
@@ -563,18 +571,38 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
 
     return (
       <div key={msg.id} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'} w-full group relative mb-1`} onMouseEnter={() => setHoveredMsgId(msg.id)} onMouseLeave={() => setHoveredMsgId(null)}>
-        <div onContextMenu={(e) => { e.preventDefault(); setMenuConfig({ msg, x: e.clientX, y: e.clientY, type: 'context' }); }}
+        {!msg.isMe && (
+          <div className="flex flex-col items-center mr-2 shrink-0 self-start mt-1">
+            <div className="w-8 h-8 rounded-full bg-slate-800 overflow-hidden border border-white/5 shadow-sm">
+              {msg.sender_profile_picture ? <img src={msg.sender_profile_picture} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-slate-500">{(msg.sender_name || activeConv.other_name)[0]}</div>}
+            </div>
+          </div>
+        )}
+        <div 
+          onClick={(e) => {
+            // For mobile/touch users, open menu on click
+            if (window.innerWidth < 768) {
+              setMenuConfig({ msg, x: e.clientX, y: e.clientY, type: 'context' });
+            }
+          }}
+          onContextMenu={(e) => { e.preventDefault(); setMenuConfig({ msg, x: e.clientX, y: e.clientY, type: 'context' }); }}
           className={`p-2 px-3 rounded-lg shadow-sm min-w-[80px] flex flex-col relative text-[14.5px] transition-all ${msg.isMe ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-slate-200 rounded-tl-none'} max-w-[85%] sm:max-w-[75%] md:max-w-[70%] lg:max-w-[60%] overflow-wrap-anywhere`}
         >
+          {!msg.isMe && (
+            <span className="text-[11px] font-black uppercase tracking-widest text-emerald-500 mb-1 block">
+              {msg.sender_name || activeConv.other_name}
+            </span>
+          )}
           {replyMsg && (
             <div 
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 const el = document.getElementById(`msg-${replyMsg.messageGroupId || replyMsg.message_group_id}`);
                 if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }}
               className="mb-2 p-2 bg-black/20 border-l-4 border-emerald-500 rounded flex flex-col gap-1 cursor-pointer hover:bg-black/30 transition-colors"
             >
-              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">{replyMsg.isMe ? 'You' : activeConv.other_name}</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">{replyMsg.isMe ? 'You' : (replyMsg.sender_name || activeConv.other_name)}</span>
               <p className="text-[12px] text-slate-400 truncate leading-tight">{replyMsg.text || (replyMsg.type === 'image' ? '📷 Photo' : replyMsg.type === 'audio' ? '🎵 Voice Note' : '📄 Document')}</p>
             </div>
           )}
