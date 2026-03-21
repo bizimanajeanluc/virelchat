@@ -10,6 +10,8 @@ import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
 import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
 
 dotenv.config({ override: true });
 
@@ -18,164 +20,29 @@ const __dirname = path.dirname(__filename);
 const projectRoot = (path.basename(__dirname) === 'dist_server') ? path.resolve(__dirname, '..') : __dirname;
 
 // Database path from environment or default to local chat.db
+// NOTE: Your project is using SQLite (Better-SQLite3)
 const dbPath = process.env.DATABASE_PATH || path.join(projectRoot, 'chat.db');
 const db = new Database(dbPath);
 
-// Target Admin Credentials from environment
-const targetAdminEmail = process.env.ADMIN_EMAIL || 'bizimanajeanluc73@gmail.com';
-const targetAdminPhone = process.env.ADMIN_PHONE || '0723223652';
-
-// Email Configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  }
-});
-
-async function sendVerificationEmail(to: string, code: string, retries = 3): Promise<boolean> {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS || !to || !to.includes('@')) {
-    console.log(`[AUTH] Email NOT sent (missing credentials or invalid recipient): to=${to}`);
-    return false;
-  }
-  const mailOptions = {
-    from: `"virelChat" <${process.env.SMTP_USER}>`,
-    to,
-    subject: `Your virelChat Verification Code`,
-    text: `Your verification code is ${code}. It will expire in 10 minutes.`,
-    html: `<div style="font-family: sans-serif; max-width: 500px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;"><h2 style="color: #10b981; text-align: center;">virelChat Verification</h2><p>Please use the following code to verify your account:</p><div style="background: #f9f9f9; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; border-radius: 5px; margin: 20px 0;">${code}</div><p style="color: #666; font-size: 12px; text-align: center;">This code will expire in 10 minutes.</p></div>`,
-  };
-  for (let i = 0; i < retries; i++) {
-    try { 
-      await transporter.sendMail(mailOptions); 
-      console.log(`[AUTH] Email sent successfully to ${to}`);
-      return true; 
-    } catch (err: any) { 
-      console.error(`[AUTH] Email delivery attempt ${i+1} failed for ${to}:`, err.message);
-      if (i === retries - 1) return false; 
-      await new Promise(resolve => setTimeout(resolve, 2000)); 
-    }
-  }
-  return false;
-}
-
-// Initialize Database
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    email TEXT UNIQUE,
-    phone TEXT,
-    password TEXT,
-    display_name TEXT,
-    profile_picture TEXT,
-    about TEXT,
-    ward_id TEXT,
-    role TEXT DEFAULT 'user',
-    is_verified INTEGER DEFAULT 0,
-    last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS blocked_users (
-    blocker_id TEXT,
-    blocked_id TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (blocker_id, blocked_id)
-  );
-
-  CREATE TABLE IF NOT EXISTS verification_codes (
-    id TEXT PRIMARY KEY,
-    user_id TEXT,
-    code TEXT,
-    expires_at DATETIME,
-    attempts INTEGER DEFAULT 0
-  );
-
-  CREATE TABLE IF NOT EXISTS devices (
-    id TEXT PRIMARY KEY,
-    user_id TEXT,
-    device_name TEXT,
-    identity_key TEXT,
-    signed_pre_key TEXT,
-    registration_id INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS one_time_pre_keys (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id TEXT,
-    key_id INTEGER,
-    public_key TEXT,
-    used INTEGER DEFAULT 0
-  );
-
-  CREATE TABLE IF NOT EXISTS conversations (
-    id TEXT PRIMARY KEY,
-    user1_id TEXT,
-    user2_id TEXT,
-    ward_id TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user1_id, user2_id)
-  );
-
-  CREATE TABLE IF NOT EXISTS encrypted_messages (
-    id TEXT PRIMARY KEY,
-    message_group_id TEXT,
-    conversation_id TEXT,
-    sender_id TEXT,
-    recipient_device_id TEXT,
-    payload TEXT,
-    delivered INTEGER DEFAULT 0,
-    read INTEGER DEFAULT 0,
-    reply_to_id TEXT,
-    is_forwarded INTEGER DEFAULT 0,
-    edited_at DATETIME,
-    deleted_at DATETIME,
-    deleted_by TEXT,
-    reactions TEXT,
-    is_starred INTEGER DEFAULT 0,
-    type TEXT DEFAULT 'text',
-    media_url TEXT,
-    media_meta TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS calls (
-    id TEXT PRIMARY KEY,
-    caller_id TEXT,
-    recipient_id TEXT,
-    type TEXT,
-    status TEXT,
-    duration INTEGER DEFAULT 0,
-    deleted_by TEXT DEFAULT '[]',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS wards (
-    id TEXT PRIMARY KEY,
-    name TEXT
-  );
-`);
-
-// Self-healing: Ensure new columns exist in the users table for older deployments
-try { db.prepare('ALTER TABLE users ADD COLUMN role TEXT DEFAULT "user"').run(); } catch (e) {}
-try { db.prepare('ALTER TABLE users ADD COLUMN phone TEXT').run(); } catch (e) {}
-try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN reply_to_id TEXT').run(); } catch (e) {}
-try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN is_forwarded INTEGER DEFAULT 0').run(); } catch (e) {}
-try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN edited_at DATETIME').run(); } catch (e) {}
-try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN deleted_at DATETIME').run(); } catch (e) {}
-try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN deleted_by TEXT').run(); } catch (e) {}
-try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN reactions TEXT').run(); } catch (e) {}
-try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN is_starred INTEGER DEFAULT 0').run(); } catch (e) {}
-try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN type TEXT DEFAULT "text"').run(); } catch (e) {}
-try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN media_url TEXT').run(); } catch (e) {}
-try { db.prepare('ALTER TABLE encrypted_messages ADD COLUMN media_meta TEXT').run(); } catch (e) {}
-
 const app = express();
 
-// Secure CORS: Allow the APP_URL from .env or fallback to * in development
+// 1. PRODUCTION OPTIMIZATION: Enable Gzip compression for faster mobile loading
+app.use(compression());
+
+// 2. SECURITY: Set security headers with special adjustment for Socket.io and manifest.json
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP for high-compatibility with PWA/Vite
+  crossOriginEmbedderPolicy: false,
+}));
+
+// 3. CORS POLICY: Allow both Railway URL and Android App Origin
+const allowedOrigins = [
+  process.env.APP_URL, // e.g., https://virelchat-production.up.railway.app
+  'android-app://com.jeanluc.virelchat' // Necessary for Android TWA/APK
+].filter(Boolean) as string[];
+
 const corsOptions = {
-  origin: process.env.APP_URL || '*',
+  origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 };
@@ -828,12 +695,21 @@ app.delete('/admin/users/:id', authenticate, adminOnly, (req, res) => {
 const distPath = path.join(projectRoot, 'dist');
 app.use(express.static(distPath));
 
+// Specifically serve .well-known for PWA/TWA verification
+app.use('/.well-known', express.static(path.join(distPath, '.well-known')));
+
 // API Routes (already defined)
 
 // Catch-all route to serve the frontend for any non-API request
 app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api') && !req.path.startsWith('/socket.io')) {
+  const isApiRequest = req.path.startsWith('/api') || req.path.startsWith('/socket.io');
+  const isStaticFile = req.path.includes('.') || req.path.startsWith('/.well-known');
+  
+  if (!isApiRequest && !isStaticFile) {
     res.sendFile(path.join(distPath, 'index.html'));
+  } else if (isStaticFile && !isApiRequest) {
+    // If it's a static file request that wasn't found in dist, return 404
+    res.status(404).end();
   }
 });
 

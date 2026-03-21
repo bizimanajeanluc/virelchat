@@ -773,14 +773,14 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
       <div id="messaging-area" className={`flex flex-col h-full bg-[#0b141a] relative transition-all duration-200 ease-in-out z-20 flex-1 ${activeConv ? 'flex' : 'hidden md:flex items-center justify-center bg-[#222e35]'}`}>
         {activeConv ? (
           <>
-            <div className="bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 p-3 h-16 flex items-center justify-between shrink-0">
+            <div className="bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 p-3 h-16 flex items-center justify-between shrink-0 z-10">
               <div className="flex items-center gap-3 min-w-0 cursor-pointer flex-1" onClick={() => setShowContactInfo(true)}>
-                <button onClick={() => setActiveConv(null)} className="md:hidden p-2 -ml-2 text-slate-400"><ArrowLeft size={20} /></button>
+                <button onClick={() => setActiveConv(null)} className="md:hidden p-2 -ml-2 text-slate-400 hover:text-emerald-500 transition-colors"><ArrowLeft size={20} /></button>
                 <div className="relative shrink-0">
                   <div className="w-10 h-10 rounded-full bg-slate-800 overflow-hidden shrink-0">{(activeConv.other_profile_picture && !activeConv.is_blocked_by_me && !activeConv.has_blocked_me) ? <img src={activeConv.other_profile_picture} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-800 flex items-center justify-center font-bold text-slate-500">{activeConv.other_name[0]}</div>}</div>
                   {onlineUsers.has(activeConv.other_id) && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-[#020617] shadow-[0_0_8px_#10b981]" />}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <h2 className="font-bold text-slate-100 truncate text-sm flex items-center gap-2">
                     {activeConv.other_name}
                     {onlineUsers.has(activeConv.other_id) && <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />}
@@ -802,15 +802,19 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
                 <button onClick={() => setShowContactInfo(!showContactInfo)} className="p-2.5 text-slate-400"><MoreVertical size={20} /></button>
               </div>
             </div>
-            <div ref={scrollRef} className={`flex-1 overflow-y-auto p-4 lg:px-12 space-y-3 relative scrollbar-hide transition-all duration-500 ${currentBg.class}`} style={currentBg.style}>
-              <div className="flex justify-center my-4 sticky top-4 z-10"><div className="bg-[#182229]/80 backdrop-blur-md text-[11px] font-medium text-slate-300 px-4 py-1.5 rounded-xl border border-white/5 shadow-sm max-w-[85%] text-center uppercase tracking-wider"><Shield className="w-3 h-3 text-emerald-500 inline mr-2" /> End-to-end encrypted</div></div>
-              {messages.filter(m => !searchQuery || m.text?.toLowerCase().includes(searchQuery.toLowerCase())).map(msg => (
-                <div key={msg.id} id={`msg-${msg.messageGroupId || msg.message_group_id}`}>
-                  {renderMessageContent(msg)}
-                </div>
-              ))}
+            {/* Dynamic Chat Area: Uses flex-col-reverse for bottom anchoring */}
+            <div ref={scrollRef} className={`flex-1 overflow-y-auto p-4 lg:px-12 relative scrollbar-hide flex flex-col-reverse transition-all duration-500 ${currentBg.class}`} style={currentBg.style}>
+              <div className="flex flex-col gap-3 py-4">
+                {/* Messages mapped in reverse order for col-reverse anchoring */}
+                {[...messages].filter(m => !searchQuery || m.text?.toLowerCase().includes(searchQuery.toLowerCase())).map(msg => (
+                  <div key={msg.id} id={`msg-${msg.messageGroupId || msg.message_group_id}`}>
+                    {renderMessageContent(msg)}
+                  </div>
+                ))}
+                <div className="flex justify-center my-4 sticky top-4 z-10"><div className="bg-[#182229]/80 backdrop-blur-md text-[11px] font-medium text-slate-300 px-4 py-1.5 rounded-xl border border-white/5 shadow-sm max-w-[85%] text-center uppercase tracking-wider"><Shield className="w-3 h-3 text-emerald-500 inline mr-2" /> End-to-end encrypted</div></div>
+              </div>
             </div>
-            <div className="p-3 bg-[#202c33] border-t border-white/5">
+            <div className="p-3 bg-[#202c33] border-t border-white/5 pb-[max(env(safe-area-inset-bottom),12px)]">
               {replyingTo && (
                 <div className="mb-2 p-3 bg-[#111b21] rounded-xl border-l-4 border-emerald-500 flex items-center justify-between group animate-in slide-in-from-bottom-2 duration-200">
                   <div className="flex flex-col gap-1 overflow-hidden">

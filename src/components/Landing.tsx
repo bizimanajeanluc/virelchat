@@ -48,7 +48,9 @@ export const Landing: React.FC<LandingProps> = ({ onGetStarted }) => {
                 </p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 md:gap-6 px-4">
                   <button onClick={onGetStarted} className="w-full sm:w-auto bg-emerald-600 text-white px-10 md:px-14 py-4 md:py-5 rounded-2xl md:rounded-[2rem] font-black hover:bg-emerald-500 transition-all shadow-2xl shadow-emerald-900/50 text-[11px] md:text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 active:scale-95">Initiate Session <ArrowRight className="w-4 h-4" /></button>
-                  <button className="w-full sm:w-auto bg-white/5 border border-white/10 text-slate-300 px-10 md:px-14 py-4 md:py-5 rounded-2xl md:rounded-[2rem] font-black hover:bg-white/10 transition-all text-[11px] md:text-xs uppercase tracking-[0.2em]">Protocol Specs</button>
+                  <a href="/virelchat.apk" download className="w-full sm:w-auto bg-white/5 border border-white/10 text-slate-300 px-10 md:px-14 py-4 md:py-5 rounded-2xl md:rounded-[2rem] font-black hover:bg-white/10 transition-all text-[11px] md:text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3">
+                    Download for Android (.apk)
+                  </a>
                 </div>
               </motion.div>
             </div>
