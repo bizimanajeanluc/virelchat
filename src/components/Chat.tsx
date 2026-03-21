@@ -894,16 +894,18 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
                 </div>
               )}
               {activeConv.is_blocked_by_me || activeConv.has_blocked_me ? ( <div className="p-4 bg-[#111b21] rounded-xl text-sm text-slate-400 italic text-center w-full">{activeConv.is_blocked_by_me ? 'You blocked this contact. Tap to unblock.' : 'You have been blocked by this contact.'}{activeConv.is_blocked_by_me && <button onClick={() => api.post('/api/users/unblock', { blockedId: activeConv.other_id })} className="ml-2 text-emerald-500 font-bold hover:underline">Unblock</button>}</div> ) : (
-                <div className="flex items-end gap-2 max-w-5xl mx-auto relative">
-                  <button onClick={() => setShowAttachmentMenu(!showAttachmentMenu)} className="p-3 text-slate-400 hover:text-white"><Plus size={24} /></button>
-                  <div className="flex-1 bg-[#2a3942] rounded-2xl flex items-center px-2 py-1.5 min-h-[44px]">
-                    {isRecording ? ( <div className="flex items-center w-full px-2 gap-3 text-red-400 animate-pulse"><Mic2 size={20} /><span className="font-mono font-bold text-sm">{formatDuration(recordingDuration)}</span><div className="flex-1" /><span className="text-[10px] uppercase font-black tracking-widest text-slate-500">Recording...</span></div> ) : (
-                      <><button className="p-2 text-slate-400 hover:text-slate-200"><Smile size={24} /></button><textarea placeholder="Type a message" className="flex-1 bg-transparent text-slate-200 text-sm outline-none px-2 resize-none max-h-32 py-2" rows={1} value={newMessage} onChange={e => { setNewMessage(e.target.value); getSocket()?.emit('typing', { recipientId: activeConv.other_id, isTyping: true }); }} onBlur={() => getSocket()?.emit('typing', { recipientId: activeConv.other_id, isTyping: false })} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(e); getSocket()?.emit('typing', { recipientId: activeConv.other_id, isTyping: false }); } }} /></>
+                <div className="flex items-end gap-1.5 max-w-5xl mx-auto relative px-1">
+                  <button onClick={() => setShowAttachmentMenu(!showAttachmentMenu)} className="p-2.5 text-slate-400 hover:text-white shrink-0"><Plus size={22} /></button>
+                  <div className="flex-1 bg-[#2a3942] rounded-2xl flex items-center px-1.5 py-1 min-h-[40px] min-w-0">
+                    {isRecording ? ( <div className="flex items-center w-full px-2 gap-2 text-red-400 animate-pulse"><Mic2 size={18} className="shrink-0" /><span className="font-mono font-bold text-xs">{formatDuration(recordingDuration)}</span><div className="flex-1" /><span className="text-[9px] uppercase font-black tracking-widest text-slate-500 truncate">Recording...</span></div> ) : (
+                      <><button className="p-1.5 text-slate-400 hover:text-slate-200 shrink-0"><Smile size={22} /></button><textarea placeholder="Type a message" className="flex-1 bg-transparent text-slate-200 text-sm outline-none px-1.5 resize-none max-h-32 py-1.5 min-w-0" rows={1} value={newMessage} onChange={e => { setNewMessage(e.target.value); getSocket()?.emit('typing', { recipientId: activeConv.other_id, isTyping: true }); }} onBlur={() => getSocket()?.emit('typing', { recipientId: activeConv.other_id, isTyping: false })} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(e); getSocket()?.emit('typing', { recipientId: activeConv.other_id, isTyping: false }); } }} /></>
                     )}
                   </div>
-                  {isRecording ? ( <div className="flex gap-2"><button onClick={() => stopRecording(true)} className="p-3 rounded-full bg-slate-700 text-white shadow-lg transition-all"><Trash2 size={20} /></button><button onClick={() => stopRecording(false)} className="p-3 rounded-full bg-emerald-500 text-white shadow-lg transition-all"><Send size={20} className="ml-0.5" /></button></div> ) : (
-                    <button onClick={newMessage.trim() ? sendMessage : startRecording} className={`p-3 rounded-full shadow-lg ${newMessage.trim() ? 'bg-emerald-500 text-white' : 'bg-[#2a3942] text-slate-400'}`}>{newMessage.trim() ? <Send size={20} className="ml-0.5" /> : <Mic size={20} />}</button>
-                  )}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {isRecording ? ( <><button onClick={() => stopRecording(true)} className="p-2.5 rounded-full bg-slate-700 text-white shadow-lg transition-all"><Trash2 size={18} /></button><button onClick={() => stopRecording(false)} className="p-2.5 rounded-full bg-emerald-500 text-white shadow-lg transition-all"><Send size={18} className="ml-0.5" /></button></> ) : (
+                      <button onClick={newMessage.trim() ? sendMessage : startRecording} className={`p-2.5 rounded-full shadow-lg transition-all ${newMessage.trim() ? 'bg-emerald-500 text-white' : 'bg-[#2a3942] text-slate-400'}`}>{newMessage.trim() ? <Send size={18} className="ml-0.5" /> : <Mic size={18} />}</button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
