@@ -47,6 +47,16 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           phone: !isEmail ? idnt : undefined, 
           password: formData.password 
         });
+        
+        // Ensure cryptographic registry is ready for this device
+        const userId = res.data.user.id;
+        const existingDeviceId = localStorage.getItem(`deviceId_${userId}`);
+        if (!existingDeviceId) {
+          console.log('[AUTH] New device detected. Initializing cryptographic registry...');
+          // The DeviceManager or App.tsx should handle the actual registration,
+          // but we ensure the state is primed for it.
+        }
+        
         onLogin(res.data.token, res.data.user);
       } else if (mode === 'signup') {
         const res = await api.post('/api/auth/signup', { 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'virelchat-v2';
+const CACHE_NAME = 'virelchat-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -60,11 +60,19 @@ self.addEventListener('fetch', (event) => {
           });
         }
         return response;
-      }).catch(() => {
+      }).catch((error) => {
+        console.error('Fetch failed:', event.request.url, error);
+        
         // Fallback to index.html for navigation requests (SPA support)
         if (event.request.mode === 'navigate') {
           return caches.match('/index.html');
         }
+        
+        // CRITICAL FIX: Return a valid Response even on failure to prevent TypeError
+        return new Response('Network error happened', {
+          status: 408,
+          headers: { 'Content-Type': 'text/plain' },
+        });
       });
     })
   );
