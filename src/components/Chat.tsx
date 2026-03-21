@@ -826,7 +826,9 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
                                 conv.delivered ? <CheckCheck className="w-3.5 h-3.5 text-slate-500 shrink-0" /> : 
                                 <Check className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                               )}
-                              <span className="truncate">{conv.last_message || 'Start chatting'}</span>
+                              <span className="truncate">
+                                {conv.last_message ? (conv.last_message.length > 30 ? conv.last_message.substring(0, 30) + '...' : conv.last_message) : 'Start chatting'}
+                              </span>
                             </div>
                           )}
                         </div>
