@@ -616,6 +616,52 @@ io.on('connection', (socket) => {
       io.to(`user:${userId}`).to(`user:${data.otherId}`).emit('call_history_update');
     });
 
+    socket.on('delete_message', (data) => {
+      const { messageGroupId, mode } = data;
+      const msg = db.prepare('SELECT conversation_id, sender_id FROM encrypted_messages WHERE message_group_id = ? LIMIT 1').get(messageGroupId) as any;
+      if (!msg) return;
+
+      const conv = db.prepare('SELECT user1_id, user2_id FROM conversations WHERE id = ?').get(msg.conversation_id) as any;
+      if (!conv) return;
+
+      if (mode === 'everyone') {
+        if (msg.sender_id !== userId) return; // Only sender can delete for everyone
+        db.prepare('UPDATE encrypted_messages SET deleted_at = CURRENT_TIMESTAMP WHERE message_group_id = ?').run(messageGroupId);
+        io.to(`user:${conv.user1_id}`).to(`user:${conv.user2_id}`).emit('message_deleted', { messageGroupId, mode: 'everyone' });
+      } else {
+        // Delete for me: update deleted_by column
+        const messages = db.prepare('SELECT id, deleted_by FROM encrypted_messages WHERE message_group_id = ?').all(messageGroupId) as any[];
+        messages.forEach(m => {
+          const deletedBy = JSON.parse(m.deleted_by || '[]');
+          if (!deletedBy.includes(userId)) {
+            deletedBy.push(userId);
+            db.prepare('UPDATE encrypted_messages SET deleted_by = ? WHERE id = ?').run(JSON.stringify(deletedBy), m.id);
+          }
+        });
+        socket.emit('message_deleted', { messageGroupId, mode: 'me' });
+      }
+    });
+
+    socket.on('message_reaction', (data) => {
+      const { messageGroupId, emoji, action } = data;
+      const msg = db.prepare('SELECT conversation_id, sender_id FROM encrypted_messages WHERE message_group_id = ? LIMIT 1').get(messageGroupId) as any;
+      if (!msg) return;
+
+      const messages = db.prepare('SELECT id, reactions FROM encrypted_messages WHERE message_group_id = ?').all(messageGroupId) as any[];
+      messages.forEach(m => {
+        let reactions = JSON.parse(m.reactions || '[]');
+        if (action === 'add') {
+          reactions.push({ userId, emoji });
+        } else {
+          reactions = reactions.filter((r: any) => !(r.userId === userId && r.emoji === emoji));
+        }
+        db.prepare('UPDATE encrypted_messages SET reactions = ? WHERE id = ?').run(JSON.stringify(reactions), m.id);
+      });
+
+      const conv = db.prepare('SELECT user1_id, user2_id FROM conversations WHERE id = ?').get(msg.conversation_id) as any;
+      io.to(`user:${conv.user1_id}`).to(`user:${conv.user2_id}`).emit('reaction_update', { messageGroupId, reactions: JSON.parse(messages[0].reactions || '[]') });
+    });
+
     socket.on('disconnect', () => {
       const currentCount = onlineUsersList.get(userId) || 1;
       if (currentCount <= 1) {

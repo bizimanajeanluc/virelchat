@@ -53,6 +53,98 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
   const [chatBackground, setChatBackground] = useState(() => localStorage.getItem(`chatBg_${user.id}`) || 'default');
   const [showBgPicker, setShowBgPicker] = useState(false);
   const [showDiagnosticReport, setShowDiagnosticReport] = useState(false);
+  const [forwardingMsg, setForwardingMsg] = useState<any>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const longPressTimerRef = useRef<any>(null);
+
+  const showToast = (message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 2000);
+  };
+
+  const handleTouchStart = (msg: any, e: React.TouchEvent) => {
+    const { clientX, clientY } = e.touches[0];
+    longPressTimerRef.current = setTimeout(() => {
+      setMenuConfig({ msg, x: clientX, y: clientY, type: 'context' });
+      if (navigator.vibrate) navigator.vibrate(50);
+    }, 800);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+  };
+
+  const copyToClipboard = (text: string) => {
+    const finalWrapper = () => {
+      showToast('Message Copied');
+      setMenuConfig(null);
+    };
+
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(finalWrapper);
+    } else {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "0";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        finalWrapper();
+      } catch (err) {}
+      document.body.removeChild(textArea);
+    }
+  };
+
+  const handleReplyAction = (msg: any) => {
+    setReplyingTo(msg);
+    setMenuConfig(null);
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  };
+
+  const handleForward = async (msg: any, targetConv: any) => {
+    const text = msg.text || (msg.type === 'image' ? '📷 Photo' : msg.type === 'audio' ? '🎵 Voice Note' : '📄 Document');
+    const messageGroupId = crypto.randomUUID();
+    try {
+      const [recipientRes, senderRes] = await Promise.all([
+        api.get(`/api/keys/${targetConv.other_id}`),
+        api.get(`/api/keys/${user.id}`)
+      ]);
+      const allBundles = [...recipientRes.data, ...senderRes.data];
+      const payloads: Record<string, any> = {};
+      const myDeviceId = localStorage.getItem(`deviceId_${user.id}`);
+      
+      for (const bundle of allBundles) {
+        const encryptedBody = await CryptoEngine.encryptMessage(text, bundle.identityKey, user.id);
+        payloads[bundle.deviceId] = { body: encryptedBody, senderDeviceId: myDeviceId };
+      }
+
+      if (msg.type && msg.type !== 'text') {
+        getSocket()?.emit('send_media', { 
+          conversationId: targetConv.id, 
+          recipientId: targetConv.other_id, 
+          messageGroupId, 
+          type: msg.type, 
+          mediaUrl: msg.media_url, 
+          mediaMeta: JSON.parse(msg.media_meta || '{}'), 
+          payloads,
+          isForwarded: true 
+        });
+      } else {
+        getSocket()?.emit('send_message', { 
+          conversationId: targetConv.id, 
+          recipientId: targetConv.other_id, 
+          messageGroupId, 
+          payloads,
+          isForwarded: true 
+        });
+      }
+    } catch (err) {}
+  };
 
   const backgroundOptions = [
     { id: 'default', name: 'Standard', class: 'wa-background', color: '#0b141a' },
@@ -329,6 +421,10 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
         fetchConversations();
       });
 
+      socket.on('reaction_update', (data) => {
+        setMessages(prev => prev.map(m => (m.messageGroupId === data.messageGroupId || m.message_group_id === data.messageGroupId) ? { ...m, reactions: data.reactions } : m));
+      });
+
       socket.on('call_incoming', (data) => { setIncomingCall(data); startSound('ringing'); socket.emit('call_ringing', { callerId: data.callerId }); });
       socket.on('call_ended', () => { stopSound(); setShowCallingUI(false); setCurrentCallData(null); fetchCalls(); });
       socket.on('call_history_update', fetchCalls);
@@ -467,8 +563,15 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
     try {
       const res = await api.post('/api/conversations', { recipientId });
       const otherUser = wardUsers.find(u => u.id === recipientId);
-      setActiveConv({ ...res.data, other_name: otherUser?.display_name || 'User', other_profile_picture: otherUser?.profile_picture, other_id: recipientId });
-      setShowNewChat(false); fetchConversations();
+      const conv = { ...res.data, other_name: otherUser?.display_name || 'User', other_profile_picture: otherUser?.profile_picture, other_id: recipientId };
+      setActiveConv(conv);
+      setShowNewChat(false);
+      fetchConversations();
+
+      if (forwardingMsg) {
+        handleForward(forwardingMsg, conv);
+        setForwardingMsg(null);
+      }
     } catch (err) {}
   };
 
@@ -893,9 +996,52 @@ export const Chat: React.FC<ChatProps> = ({ user }) => {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>{menuConfig && ( <div className="fixed inset-0 z-[1000] flex items-center justify-center md:block overflow-hidden" onClick={() => setMenuConfig(null)}><motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="md:hidden absolute inset-0 bg-black/60 backdrop-blur-sm" /><motion.div initial={window.innerWidth < 768 ? { y: '100%' } : { opacity: 0, scale: 0.95 }} animate={window.innerWidth < 768 ? { y: 0 } : { opacity: 1, scale: 1, x: Math.min(menuConfig.x, window.innerWidth - 260), y: Math.min(menuConfig.y, window.innerHeight - 300) }} exit={window.innerWidth < 768 ? { y: '100%' } : { opacity: 0, scale: 0.95 }} transition={{ duration: 0.2 }} className={`absolute z-[1001] bg-[#233138] border border-white/10 shadow-2xl overflow-hidden ${window.innerWidth < 768 ? 'bottom-0 left-0 right-0 rounded-t-[2rem]' : 'rounded-xl w-[240px]'}`} onClick={e => e.stopPropagation()}>
-        {menuConfig.type === 'reactions' ? ( <div className="flex items-center justify-around p-4 gap-2">{['👍', '❤️', '😂', '😮', '😢', '🙏'].map(emoji => (<button key={emoji} onClick={() => handleReact(menuConfig.msg, emoji)} className="text-2xl hover:scale-125 transition-transform duration-200">{emoji}</button>))}<button className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:text-white"><Plus size={20} /></button></div> ) : ( <div className="py-2"> {[ { label: 'Reply', icon: Reply, color: 'text-slate-300', action: () => setReplyingTo(menuConfig.msg) }, { label: 'Copy', icon: Copy, color: 'text-slate-300', action: () => navigator.clipboard.writeText(msgTextForCopy(menuConfig.msg)) }, { label: 'Star', icon: Star, color: menuConfig.msg.isStarred ? 'text-yellow-500' : 'text-slate-300', action: () => handleStarMessage(menuConfig.msg) }, { label: 'Forward', icon: CornerUpRight, color: 'text-slate-300', action: () => { /* Implement Forward Logic */ } }, { label: 'Delete for me', icon: Trash2, color: 'text-red-400', action: () => handleDeleteMessage(menuConfig.msg, 'me') }, ...(menuConfig.msg.isMe ? [{ label: 'Delete for everyone', icon: AlertCircle, color: 'text-red-400', action: () => handleDeleteMessage(menuConfig.msg, 'everyone') }] : []) ].map((item, idx) => ( <button key={idx} onClick={() => { item.action(); setMenuConfig(null); }} className={`w-full flex items-center gap-4 px-5 py-3 hover:bg-white/5 transition-colors text-left ${item.color}`}><item.icon size={20} opacity={0.7} /><span className="text-[15px] font-medium">{item.label}</span></button> ))} </div> )}
-      </motion.div></div> )}</AnimatePresence>
+      <AnimatePresence>{menuConfig && ( 
+        <div 
+          className="fixed inset-0 z-[1000] flex items-center justify-center md:block overflow-hidden" 
+          onClick={(e) => { e.stopPropagation(); setMenuConfig(null); }}
+          onContextMenu={(e) => { e.preventDefault(); setMenuConfig(null); }}
+        >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="md:hidden absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <motion.div 
+            initial={window.innerWidth < 768 ? { y: '100%' } : { opacity: 0, scale: 0.95 }} 
+            animate={window.innerWidth < 768 ? { y: 0 } : { opacity: 1, scale: 1, x: Math.min(menuConfig.x, window.innerWidth - 260), y: Math.min(menuConfig.y, window.innerHeight - 300) }} 
+            exit={window.innerWidth < 768 ? { y: '100%' } : { opacity: 0, scale: 0.95 }} 
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }} 
+            className={`absolute z-[1001] bg-[#233138] border border-white/10 shadow-2xl overflow-hidden ${window.innerWidth < 768 ? 'bottom-0 left-0 right-0 rounded-t-[2rem]' : 'rounded-xl w-[240px]'}`} 
+            onClick={e => e.stopPropagation()}
+          >
+            {menuConfig.type === 'reactions' ? ( 
+              <div className="flex items-center justify-around p-4 gap-2">
+                {['👍', '❤️', '😂', '😮', '😢', '🙏'].map(emoji => (
+                  <button key={emoji} onClick={(e) => { e.stopPropagation(); handleReact(menuConfig.msg, emoji); setMenuConfig(null); }} className="text-2xl hover:scale-125 transition-transform duration-200">{emoji}</button>
+                ))}
+                <button className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:text-white"><Plus size={20} /></button>
+              </div> 
+            ) : ( 
+              <div className="py-2"> 
+                {[ 
+                  { label: 'Reply', icon: Reply, color: 'text-slate-300', action: () => setReplyingTo(menuConfig.msg) }, 
+                  { label: 'Copy', icon: Copy, color: 'text-slate-300', action: () => copyToClipboard(msgTextForCopy(menuConfig.msg)) }, 
+                  { label: 'Star', icon: Star, color: menuConfig.msg.isStarred ? 'text-yellow-500' : 'text-slate-300', action: () => handleStarMessage(menuConfig.msg) }, 
+                  { label: 'Forward', icon: CornerUpRight, color: 'text-slate-300', action: () => { setForwardingMsg(menuConfig.msg); setShowNewChat(true); } }, 
+                  { label: 'Delete for me', icon: Trash2, color: 'text-red-400', action: () => handleDeleteMessage(menuConfig.msg, 'me') }, 
+                  ...(menuConfig.msg.isMe ? [{ label: 'Delete for everyone', icon: AlertCircle, color: 'text-red-400', action: () => handleDeleteMessage(menuConfig.msg, 'everyone') }] : []) 
+                ].map((item, idx) => ( 
+                  <button 
+                    key={idx} 
+                    onClick={(e) => { e.stopPropagation(); item.action(); setMenuConfig(null); }} 
+                    className={`w-full flex items-center gap-4 px-5 py-3 hover:bg-white/5 transition-colors text-left ${item.color}`}
+                  >
+                    <item.icon size={20} opacity={0.7} />
+                    <span className="text-[15px] font-medium">{item.label}</span>
+                  </button> 
+                ))} 
+              </div> 
+            )}
+          </motion.div>
+        </div> 
+      )}</AnimatePresence>
 
       <AnimatePresence>
         {showContactInfo && activeConv && (
