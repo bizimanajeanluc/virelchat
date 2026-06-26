@@ -80,7 +80,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         });
         setUserId(res.data.userId);
         setMode('verify');
-        setSuccessMessage(res.data.message + (res.data.code ? ` TEST CODE: ${res.data.code}` : ''));
+        setSuccessMessage(res.data.message);
         setResendCooldown(60);
       } else if (mode === 'verify') {
         const res = await api.post('/api/auth/verify', { userId, code: formData.code.trim() });

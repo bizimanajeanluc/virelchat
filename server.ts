@@ -238,12 +238,13 @@ app.post('/api/auth/signup', async (req, res) => {
     db.prepare('INSERT INTO verification_codes (id, user_id, code, expires_at) VALUES (?, ?, ?, ?)').run(uuidv4(), userId, code, expiresAt);
     
     console.log(`[AUTH] Signup: userId=${userId}, code=${code}, email=${email}, phone=${phone}`);
-    const sent = email ? await sendVerificationEmail(email, code) : false;
+    if (email) {
+      await sendVerificationEmail(email, code);
+    }
     
     res.json({ 
       userId, 
-      message: sent ? 'Verification code sent to your Gmail.' : (phone ? 'Verification code generated.' : 'Email delivery failed.'),
-      code: !sent ? code : undefined
+      message: email ? 'Verification code sent to your Gmail. Check your inbox and enter the code to verify.' : 'Verification code generated.'
     });
   } catch (err: any) { 
     console.error('[AUTH] Signup Error:', err);
@@ -265,11 +266,12 @@ app.post('/api/auth/resend-code', async (req, res) => {
     db.prepare('INSERT INTO verification_codes (id, user_id, code, expires_at) VALUES (?, ?, ?, ?)').run(uuidv4(), userId, code, expiresAt);
     
     console.log(`[AUTH] Resend: userId=${userId}, code=${code}, email=${user.email}`);
-    const sent = user.email ? await sendVerificationEmail(user.email, code) : false;
+    if (user.email) {
+      await sendVerificationEmail(user.email, code);
+    }
     
     res.json({ 
-      message: sent ? 'New verification code sent to your Gmail.' : 'New code generated.',
-      code: !sent ? code : undefined
+      message: user.email ? 'New verification code sent to your Gmail.' : 'New code generated.'
     });
   } catch (err: any) {
     console.error('[AUTH] Resend Error:', err);
