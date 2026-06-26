@@ -2,14 +2,12 @@ import { io, Socket } from 'socket.io-client';
 
 let socket: Socket | null = null;
 
+const API_URL = (typeof window !== 'undefined' && (window as any).__API_URL) || import.meta.env.VITE_API_URL || '';
+
 export const initSocket = (token: string) => {
-  // If we already have a connection, don't create a new one
-  // unless the token has changed (handled by caller calling disconnect first)
   if (socket?.connected) return socket;
 
-  // Use relative path so it goes through Vite proxy in dev
-  // and works correctly in production.
-  socket = io({
+  socket = io(API_URL || undefined, {
     auth: { token },
     transports: ['websocket', 'polling'],
     reconnection: true,

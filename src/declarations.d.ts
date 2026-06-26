@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 declare module 'motion/react' {
   export { motion, AnimatePresence, MotionConfig, useAnimation, useMotionValue, useTransform, useScroll, useSpring, useInView } from 'framer-motion';
   export const m: typeof import('framer-motion').motion;

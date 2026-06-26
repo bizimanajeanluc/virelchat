@@ -24,6 +24,104 @@ const projectRoot = (path.basename(__dirname) === 'dist_server') ? path.resolve(
 const dbPath = process.env.DATABASE_PATH || path.join(projectRoot, 'chat.db');
 const db = new Database(dbPath);
 
+// Enable WAL mode for better concurrent performance
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
+
+// Initialize database schema
+db.exec(`
+  CREATE TABLE IF NOT EXISTS wards (
+    id TEXT PRIMARY KEY,
+    name TEXT
+  );
+  INSERT OR IGNORE INTO wards (id, name) VALUES ('public-ward', 'Public Ward');
+
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT UNIQUE,
+    phone TEXT,
+    password TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    profile_picture TEXT,
+    about TEXT,
+    ward_id TEXT DEFAULT 'public-ward',
+    role TEXT DEFAULT 'user',
+    is_verified INTEGER DEFAULT 0,
+    last_seen TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS verification_codes (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    code TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS devices (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    device_name TEXT,
+    identity_key TEXT,
+    signed_pre_key TEXT,
+    registration_id INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS one_time_pre_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id TEXT NOT NULL,
+    key_id INTEGER,
+    public_key TEXT,
+    used INTEGER DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS conversations (
+    id TEXT PRIMARY KEY,
+    user1_id TEXT NOT NULL,
+    user2_id TEXT NOT NULL,
+    ward_id TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS encrypted_messages (
+    id TEXT PRIMARY KEY,
+    message_group_id TEXT,
+    conversation_id TEXT,
+    sender_id TEXT,
+    recipient_device_id TEXT,
+    payload TEXT,
+    type TEXT DEFAULT 'text',
+    media_url TEXT,
+    media_meta TEXT,
+    reply_to_id TEXT,
+    read INTEGER DEFAULT 0,
+    delivered INTEGER DEFAULT 0,
+    deleted_by TEXT DEFAULT '[]',
+    deleted_at TEXT,
+    reactions TEXT DEFAULT '[]',
+    is_starred INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS calls (
+    id TEXT PRIMARY KEY,
+    caller_id TEXT NOT NULL,
+    recipient_id TEXT NOT NULL,
+    type TEXT,
+    status TEXT,
+    duration INTEGER,
+    deleted_by TEXT DEFAULT '[]',
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS blocked_users (
+    blocker_id TEXT NOT NULL,
+    blocked_id TEXT NOT NULL,
+    PRIMARY KEY (blocker_id, blocked_id)
+  );
+`);
+
 const app = express();
 
 // 1. PRODUCTION OPTIMIZATION: Enable Gzip compression for faster mobile loading
