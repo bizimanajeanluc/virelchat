@@ -10,7 +10,6 @@ import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
 import { OAuth2Client } from 'google-auth-library';
-import { google } from 'googleapis';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
