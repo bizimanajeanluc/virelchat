@@ -1,6 +1,21 @@
 import axios from 'axios';
 
-const API_URL = (typeof window !== 'undefined' && (window as any).__API_URL) || import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://virelchat-7jy1.onrender.com' : '');
+const RENDER_URL = 'https://virelchat-7jy1.onrender.com';
+
+function resolveApiUrl(): string {
+  if (typeof window === 'undefined') return '';
+  const fromWindow = (window as any).__API_URL;
+  if (fromWindow) return fromWindow;
+  const fromEnv = import.meta.env.VITE_API_URL;
+  if (fromEnv) return fromEnv;
+  // If running on a non-localhost domain (e.g. Vercel), default to Render
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return RENDER_URL;
+  }
+  return '';
+}
+
+const API_URL = resolveApiUrl();
 
 const api = axios.create({
   baseURL: API_URL || '/',

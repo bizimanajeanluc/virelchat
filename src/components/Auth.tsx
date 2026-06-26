@@ -9,6 +9,8 @@ interface AuthProps {
 
 const TRUST_WORDS = ["Privacy", "Verified", "Encrypted", "Secure", "No Spying", "Signal v3"];
 
+let googleInitialized = false;
+
 export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [mode, setMode] = useState<'login' | 'signup' | 'verify' | 'forgot' | 'reset'>('login');
   const [formData, setFormData] = useState({ identifier: '', password: '', displayName: '', code: '', newPassword: '' });
@@ -18,11 +20,10 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const googleBtnRef = React.useRef<HTMLDivElement>(null);
-  const googleInitialized = React.useRef(false);
 
   useEffect(() => {
     if ((mode === 'login' || mode === 'signup') && googleBtnRef.current && window.google?.accounts?.id) {
-      if (!googleInitialized.current) {
+      if (!googleInitialized) {
         window.google.accounts.id.initialize({
           client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '972968562607-6iv5i4vqm4jr9her4o295gognllkslto.apps.googleusercontent.com',
           cancel_on_tap_outside: false,
@@ -37,7 +38,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             } finally { setIsLoading(false); }
           },
         });
-        googleInitialized.current = true;
+        googleInitialized = true;
       }
       window.google.accounts.id.renderButton(googleBtnRef.current, {
         theme: 'outline', size: 'large', type: 'standard', shape: 'pill',

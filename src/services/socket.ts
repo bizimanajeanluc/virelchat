@@ -2,7 +2,21 @@ import { io, Socket } from 'socket.io-client';
 
 let socket: Socket | null = null;
 
-const API_URL = (typeof window !== 'undefined' && (window as any).__API_URL) || import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://virelchat-7jy1.onrender.com' : '');
+const RENDER_URL = 'https://virelchat-7jy1.onrender.com';
+
+function resolveApiUrl(): string {
+  if (typeof window === 'undefined') return '';
+  const fromWindow = (window as any).__API_URL;
+  if (fromWindow) return fromWindow;
+  const fromEnv = import.meta.env.VITE_API_URL;
+  if (fromEnv) return fromEnv;
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return RENDER_URL;
+  }
+  return '';
+}
+
+const API_URL = resolveApiUrl();
 
 export const initSocket = (token: string) => {
   if (socket?.connected) return socket;
