@@ -11,7 +11,8 @@ import {
   Forward, Copy, CornerUpRight, Flag, Pin, CheckSquare, ShieldAlert, RefreshCw, 
   Volume2, Grid, ZoomIn, ZoomOut, Bluetooth, UserPlus, Camera, RotateCcw,
   Image as ImageIcon, FileText, MapPin, Headphones, Info, AlertCircle, Ban, Bell,
-  ChevronRight, ChevronDown, Lock, Download, File, Settings, HelpCircle, Mic2
+  ChevronRight, ChevronDown, Lock, Download, File, Settings, HelpCircle, Mic2,
+  ShieldCheck, CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, isToday, isYesterday } from 'date-fns';

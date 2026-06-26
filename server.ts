@@ -62,10 +62,39 @@ if (!JWT_SECRET) {
 }
 const secretToUse = JWT_SECRET || 'super-secret-lds-chat-key';
 
+const targetAdminEmail = process.env.ADMIN_EMAIL || '';
+const targetAdminPhone = process.env.ADMIN_PHONE || '';
+
 const authenticate = (req: any, res: any, next: any) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try { req.user = jwt.verify(token, secretToUse); next(); } catch (err) { res.status(401).json({ error: 'Invalid token' }); }
+};
+
+const sendVerificationEmail = async (email: string, code: string): Promise<boolean> => {
+  try {
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    if (!smtpUser || !smtpPass) {
+      console.warn('[EMAIL] SMTP not configured. Verification code will be shown in logs.');
+      return false;
+    }
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: smtpUser, pass: smtpPass },
+    });
+    await transporter.sendMail({
+      from: smtpUser,
+      to: email,
+      subject: 'Your virelChat Verification Code',
+      text: `Your verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, please ignore this email.`,
+    });
+    console.log(`[EMAIL] Verification code sent to ${email}`);
+    return true;
+  } catch (err) {
+    console.error('[EMAIL] Failed to send verification email:', err);
+    return false;
+  }
 };
 
 // --- API Routes ---

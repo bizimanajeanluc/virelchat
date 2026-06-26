@@ -27,6 +27,19 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const validateGmail = (email: string) => /^[a-zA-Z0-9._%+-]+@gmail\.com$/i.test(email);
   const validatePhone = (phone: string) => /^[0-9+]{8,15}$/.test(phone);
 
+  const handleResend = async () => {
+    setError(''); setSuccessMessage('');
+    if (!userId) return;
+    setIsLoading(true);
+    try {
+      const res = await api.post('/api/auth/resend-code', { userId });
+      setSuccessMessage(res.data.message + (res.data.code ? ` TEST CODE: ${res.data.code}` : ''));
+      setResendCooldown(60);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to resend code');
+    } finally { setIsLoading(false); }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError(''); setSuccessMessage('');
     const idntRaw = formData.identifier.trim();
