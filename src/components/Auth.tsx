@@ -241,8 +241,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
             <div className="pt-6 border-t border-white/5 text-center space-y-3">
               {mode === 'login' && (
-                <button type="button" onClick={() => { setMode('forgot'); setError(''); setSuccessMessage(''); }} className="block text-[10px] font-black text-slate-600 uppercase tracking-widest hover:text-amber-500 transition-colors mx-auto">
-                  Forgot Encryption Key?
+                <button type="button" onClick={() => { setMode('forgot'); setError(''); setSuccessMessage(''); clearForm(); }} className="block text-[10px] font-black text-slate-600 uppercase tracking-widest hover:text-amber-500 transition-colors mx-auto">
+                  Reset Password
                 </button>
               )}
               <button type="button" onClick={() => { setMode(mode === 'login' || mode === 'forgot' ? 'signup' : 'login'); setError(''); setSuccessMessage(''); }} className="text-[10px] font-black text-slate-600 uppercase tracking-widest hover:text-emerald-500 transition-colors">
