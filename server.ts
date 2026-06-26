@@ -198,15 +198,17 @@ const sendVerificationEmail = async (email: string, code: string): Promise<boole
     const smtpUser = process.env.SMTP_USER;
     const smtpPass = process.env.SMTP_PASS;
     if (!smtpUser || !smtpPass) {
-      console.warn('[EMAIL] SMTP not configured. Verification code will be shown in logs.');
+      console.error('[EMAIL] SMTP_USER or SMTP_PASS env vars not set on this server. Cannot send email.');
       return false;
     }
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
       auth: { user: smtpUser, pass: smtpPass },
     });
     await transporter.sendMail({
-      from: smtpUser,
+      from: `"virelChat" <${smtpUser}>`,
       to: email,
       subject: 'Your virelChat Verification Code',
       text: `Your verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, please ignore this email.`,
@@ -263,12 +265,15 @@ app.post('/api/auth/signup', async (req, res) => {
     
     console.log(`[AUTH] Signup: userId=${userId}, code=${code}, email=${email}, phone=${phone}`);
     if (email) {
-      await sendVerificationEmail(email, code);
+      const sent = await sendVerificationEmail(email, code);
+      if (!sent) {
+        return res.status(500).json({ error: 'Failed to send verification email. SMTP not configured on server.' });
+      }
     }
     
     res.json({ 
       userId,
-      message: email ? 'Verification code sent to your Gmail. Check your inbox and enter the code to verify.' : 'Verification code generated.'
+      message: 'Verification code sent to your Gmail. Check your inbox and enter the code to verify.'
     });
   } catch (err: any) { 
     console.error('[AUTH] Signup Error:', err);
@@ -291,11 +296,14 @@ app.post('/api/auth/resend-code', async (req, res) => {
     
     console.log(`[AUTH] Resend: userId=${userId}, code=${code}, email=${user.email}`);
     if (user.email) {
-      await sendVerificationEmail(user.email, code);
+      const sent = await sendVerificationEmail(user.email, code);
+      if (!sent) {
+        return res.status(500).json({ error: 'Failed to send verification email. SMTP not configured on server.' });
+      }
     }
     
     res.json({ 
-      message: user.email ? 'New verification code sent to your Gmail.' : 'New code generated.'
+      message: 'New verification code sent to your Gmail.'
     });
   } catch (err: any) {
     console.error('[AUTH] Resend Error:', err);
@@ -371,7 +379,10 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     db.prepare('INSERT INTO verification_codes (id, user_id, code, expires_at) VALUES (?, ?, ?, ?)').run(uuidv4(), user.id, code, expiresAt);
 
     console.log(`[AUTH] Forgot Password: userId=${user.id}, code=${code}, email=${email}`);
-    await sendVerificationEmail(email, code);
+    const sent = await sendVerificationEmail(email, code);
+    if (!sent) {
+      return res.status(500).json({ error: 'Failed to send verification email. SMTP not configured on server.' });
+    }
 
     res.json({ userId: user.id, message: 'Verification code sent to your Gmail. Check your inbox and enter the code to reset your password.' });
   } catch (err: any) {
