@@ -243,8 +243,10 @@ app.post('/api/auth/signup', async (req, res) => {
     }
     
     res.json({ 
-      userId, 
-      message: email ? 'Verification code sent to your Gmail. Check your inbox and enter the code to verify.' : 'Verification code generated.'
+      userId,
+      email: email || null,
+      code,
+      message: email ? `A 6-digit verification code has been sent to your Gmail: ${email}. You can also use the code shown below.` : 'Verification code generated.'
     });
   } catch (err: any) { 
     console.error('[AUTH] Signup Error:', err);
@@ -271,7 +273,9 @@ app.post('/api/auth/resend-code', async (req, res) => {
     }
     
     res.json({ 
-      message: user.email ? 'New verification code sent to your Gmail.' : 'New code generated.'
+      email: user.email || null,
+      code,
+      message: user.email ? `A new 6-digit verification code has been sent to your Gmail: ${user.email}. You can also use the code shown below.` : 'New code generated.'
     });
   } catch (err: any) {
     console.error('[AUTH] Resend Error:', err);
@@ -349,7 +353,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     console.log(`[AUTH] Forgot Password: userId=${user.id}, code=${code}, email=${email}`);
     await sendVerificationEmail(email, code);
 
-    res.json({ userId: user.id, message: 'Verification code sent to your Gmail. Check your inbox.' });
+    res.json({ userId: user.id, email, code, message: `A 6-digit verification code has been sent to your Gmail: ${email}. You can also use the code shown below.` });
   } catch (err: any) {
     console.error('[AUTH] Forgot Password Error:', err);
     res.status(500).json({ error: err.message });

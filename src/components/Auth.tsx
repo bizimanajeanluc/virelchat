@@ -27,13 +27,16 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const validateGmail = (email: string) => /^[a-zA-Z0-9._%+-]+@gmail\.com$/i.test(email);
   const validatePhone = (phone: string) => /^[0-9+]{8,15}$/.test(phone);
 
+  const [pendingCode, setPendingCode] = useState<string | null>(null);
+
   const handleResend = async () => {
     setError(''); setSuccessMessage('');
     if (!userId) return;
     setIsLoading(true);
     try {
       const res = await api.post('/api/auth/resend-code', { userId });
-      setSuccessMessage(res.data.message + (res.data.code ? ` TEST CODE: ${res.data.code}` : ''));
+      setPendingCode(res.data.code);
+      setSuccessMessage(res.data.message);
       setResendCooldown(60);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to resend code');
@@ -79,6 +82,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           displayName: formData.displayName.trim() 
         });
         setUserId(res.data.userId);
+        setPendingCode(res.data.code);
         setMode('verify');
         setSuccessMessage(res.data.message);
         setResendCooldown(60);
@@ -93,6 +97,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       } else if (mode === 'forgot') {
         const res = await api.post('/api/auth/forgot-password', { email: idnt });
         setUserId(res.data.userId);
+        setPendingCode(res.data.code);
         setMode('reset');
         setSuccessMessage(res.data.message);
         setResendCooldown(60);
@@ -173,6 +178,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
               {(mode === 'verify' || mode === 'reset') && (
                 <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6 pt-4">
+                  {pendingCode && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-5 text-center">
+                      <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Your Verification Code</p>
+                      <p className="text-4xl font-black text-emerald-400 tracking-[0.3em] select-all">{pendingCode}</p>
+                      <p className="text-[9px] text-emerald-500/60 mt-3 font-medium">A copy has also been sent to your Gmail inbox</p>
+                    </div>
+                  )}
                   <input type="text" placeholder="000000" maxLength={6} required className="w-full px-4 py-8 bg-white/5 border-2 border-white/10 rounded-[2.5rem] text-center text-6xl tracking-[0.5em] font-black text-emerald-500 outline-none focus:border-emerald-500/50 transition-all shadow-inner placeholder:text-slate-800" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value.replace(/\D/g, '') })} />
                   <div className="flex justify-center">
                     <button type="button" disabled={resendCooldown > 0 || isLoading} onClick={handleResend} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-emerald-500 transition-colors disabled:opacity-50">
