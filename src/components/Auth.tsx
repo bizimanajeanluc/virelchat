@@ -10,8 +10,8 @@ interface AuthProps {
 const TRUST_WORDS = ["Privacy", "Verified", "Encrypted", "Secure", "No Spying", "Signal v3"];
 
 export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
-  const [mode, setMode] = useState<'login' | 'signup' | 'verify' | 'forgot'>('login');
-  const [formData, setFormData] = useState({ identifier: '', password: '', displayName: '', code: '' });
+  const [mode, setMode] = useState<'login' | 'signup' | 'verify' | 'forgot' | 'reset'>('login');
+  const [formData, setFormData] = useState({ identifier: '', password: '', displayName: '', code: '', newPassword: '' });
   const [userId, setUserId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -84,13 +84,22 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         setResendCooldown(60);
       } else if (mode === 'verify') {
         const res = await api.post('/api/auth/verify', { userId, code: formData.code.trim() });
-        // Auto-login on successful verification
         if (res.data.token && res.data.user) {
           onLogin(res.data.token, res.data.user);
         } else {
           setMode('login'); 
           setSuccessMessage('Identity verified. You may now login.');
         }
+      } else if (mode === 'forgot') {
+        const res = await api.post('/api/auth/forgot-password', { email: idnt });
+        setUserId(res.data.userId);
+        setMode('reset');
+        setSuccessMessage(res.data.message);
+        setResendCooldown(60);
+      } else if (mode === 'reset') {
+        const res = await api.post('/api/auth/reset-password', { userId, code: formData.code.trim(), newPassword: formData.newPassword });
+        setMode('login');
+        setSuccessMessage(res.data.message);
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Authentication sequence failed.');
@@ -141,10 +150,10 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </AnimatePresence>
 
             <div className="space-y-4">
-              {mode !== 'verify' && (
+              {mode !== 'verify' && mode !== 'reset' && (
                 <div className="relative group">
                   <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 group-focus-within:text-emerald-500 transition-colors" />
-                  <input type="text" placeholder="MOBILE NUMBER / GMAIL" required autoCapitalize="none" autoCorrect="off" spellCheck="false" className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest" value={formData.identifier} onChange={e => handleIdentifierChange(e.target.value)} />
+                  <input type="text" placeholder="GMAIL ADDRESS" required autoCapitalize="none" autoCorrect="off" spellCheck="false" className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest" value={formData.identifier} onChange={e => handleIdentifierChange(e.target.value)} />
                 </div>
               )}
 
@@ -155,14 +164,14 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 </div>
               )}
 
-              {mode !== 'verify' && (
+              {(mode === 'login' || mode === 'signup') && (
                 <div className="relative group">
                   <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 group-focus-within:text-emerald-500 transition-colors" />
                   <input type="password" placeholder="ENCRYPTION KEY" required autoCapitalize="none" autoCorrect="off" spellCheck="false" className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value.toLowerCase() })} />
                 </div>
               )}
 
-              {mode === 'verify' && (
+              {(mode === 'verify' || mode === 'reset') && (
                 <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6 pt-4">
                   <input type="text" placeholder="000000" maxLength={6} required className="w-full px-4 py-8 bg-white/5 border-2 border-white/10 rounded-[2.5rem] text-center text-6xl tracking-[0.5em] font-black text-emerald-500 outline-none focus:border-emerald-500/50 transition-all shadow-inner placeholder:text-slate-800" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value.replace(/\D/g, '') })} />
                   <div className="flex justify-center">
@@ -171,17 +180,28 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                       {resendCooldown > 0 ? `Await Sync (${resendCooldown}s)` : 'Request New Token'}
                     </button>
                   </div>
+                  {mode === 'reset' && (
+                    <div className="relative group">
+                      <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 group-focus-within:text-emerald-500 transition-colors" />
+                      <input type="password" placeholder="NEW ENCRYPTION KEY" required autoCapitalize="none" autoCorrect="off" spellCheck="false" className="w-full pl-12 pr-5 py-5 bg-white/5 border border-white/10 rounded-[1.5rem] text-sm font-bold text-slate-200 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-700 tracking-widest" value={formData.newPassword} onChange={e => setFormData({ ...formData, newPassword: e.target.value.toLowerCase() })} />
+                    </div>
+                  )}
                 </motion.div>
               )}
             </div>
 
             <button type="submit" disabled={isLoading} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-6 rounded-[1.5rem] text-xs uppercase tracking-[0.4em] transition-all shadow-2xl shadow-emerald-900/40 active:scale-[0.98] disabled:opacity-50 mt-8 flex items-center justify-center gap-4 group">
-              {isLoading ? <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" /> : <>{mode === 'login' ? 'Login' : mode === 'signup' ? 'Authorize' : 'Verify Identity'}<ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>}
+              {isLoading ? <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" /> : <>{mode === 'login' ? 'Login' : mode === 'signup' ? 'Authorize' : mode === 'forgot' ? 'Send Code' : mode === 'reset' ? 'Reset Password' : 'Verify Identity'}<ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>}
             </button>
 
-            <div className="pt-6 border-t border-white/5 text-center">
-              <button type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); setSuccessMessage(''); }} className="text-[10px] font-black text-slate-600 uppercase tracking-widest hover:text-emerald-500 transition-colors">
-                {mode === 'login' ? "Need a Secure Identity? Signup" : "Existing Identity? Login to Terminal"}
+            <div className="pt-6 border-t border-white/5 text-center space-y-3">
+              {mode === 'login' && (
+                <button type="button" onClick={() => { setMode('forgot'); setError(''); setSuccessMessage(''); }} className="block text-[10px] font-black text-slate-600 uppercase tracking-widest hover:text-amber-500 transition-colors mx-auto">
+                  Forgot Encryption Key?
+                </button>
+              )}
+              <button type="button" onClick={() => { setMode(mode === 'login' || mode === 'forgot' ? 'signup' : 'login'); setError(''); setSuccessMessage(''); }} className="text-[10px] font-black text-slate-600 uppercase tracking-widest hover:text-emerald-500 transition-colors">
+                {mode === 'login' || mode === 'forgot' ? "Need a Secure Identity? Signup" : "Existing Identity? Login to Terminal"}
               </button>
             </div>
           </form>

@@ -333,6 +333,59 @@ app.post('/api/auth/verify', (req, res) => {
   }
 });
 
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required.' });
+
+    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim()) as any;
+    if (!user) return res.status(404).json({ error: 'Account does not exist.' });
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000;
+    db.prepare('DELETE FROM verification_codes WHERE user_id = ?').run(user.id);
+    db.prepare('INSERT INTO verification_codes (id, user_id, code, expires_at) VALUES (?, ?, ?, ?)').run(uuidv4(), user.id, code, expiresAt);
+
+    console.log(`[AUTH] Forgot Password: userId=${user.id}, code=${code}, email=${email}`);
+    await sendVerificationEmail(email, code);
+
+    res.json({ userId: user.id, message: 'Verification code sent to your Gmail. Check your inbox.' });
+  } catch (err: any) {
+    console.error('[AUTH] Forgot Password Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { userId, code, newPassword } = req.body;
+    if (!userId || !code || !newPassword) return res.status(400).json({ error: 'Missing required fields.' });
+    if (newPassword.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters.' });
+
+    const record = db.prepare('SELECT * FROM verification_codes WHERE user_id = ? ORDER BY expires_at DESC LIMIT 1').get(userId) as any;
+    if (!record) return res.status(400).json({ error: 'No verification code found. Please request a new one.' });
+
+    const expiry = isNaN(Number(record.expires_at)) ? new Date(record.expires_at).getTime() : Number(record.expires_at);
+    const now = Date.now();
+
+    const cleanProvided = String(code).trim();
+    const cleanActual = String(record.code).trim();
+
+    if (cleanActual !== cleanProvided) return res.status(400).json({ error: 'Invalid verification code.' });
+    if (expiry < now) return res.status(400).json({ error: 'Verification code has expired.' });
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, userId);
+    db.prepare('DELETE FROM verification_codes WHERE user_id = ?').run(userId);
+
+    console.log(`[AUTH] Password reset successful: userId=${userId}`);
+    res.json({ message: 'Password has been reset successfully. You may now login.' });
+  } catch (err: any) {
+    console.error('[AUTH] Reset Password Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, phone, password } = req.body;
