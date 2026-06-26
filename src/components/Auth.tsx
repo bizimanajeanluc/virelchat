@@ -18,23 +18,27 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const googleBtnRef = React.useRef<HTMLDivElement>(null);
+  const googleInitialized = React.useRef(false);
 
   useEffect(() => {
     if ((mode === 'login' || mode === 'signup') && googleBtnRef.current && window.google?.accounts?.id) {
-      window.google.accounts.id.initialize({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '972968562607-6iv5i4vqm4jr9her4o295gognllkslto.apps.googleusercontent.com',
-        cancel_on_tap_outside: false,
-        callback: async (response: any) => {
-          if (!response.credential) return;
-          setError(''); setSuccessMessage(''); setIsLoading(true);
-          try {
-            const res = await api.post('/api/auth/google', { credential: response.credential });
-            onLogin(res.data.token, res.data.user);
-          } catch (err: any) {
-            setError(err.response?.data?.error || 'Google Sign-In failed.');
-          } finally { setIsLoading(false); }
-        },
-      });
+      if (!googleInitialized.current) {
+        window.google.accounts.id.initialize({
+          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '972968562607-6iv5i4vqm4jr9her4o295gognllkslto.apps.googleusercontent.com',
+          cancel_on_tap_outside: false,
+          callback: async (response: any) => {
+            if (!response.credential) return;
+            setError(''); setSuccessMessage(''); setIsLoading(true);
+            try {
+              const res = await api.post('/api/auth/google', { credential: response.credential });
+              onLogin(res.data.token, res.data.user);
+            } catch (err: any) {
+              setError(err.response?.data?.error || 'Google Sign-In failed.');
+            } finally { setIsLoading(false); }
+          },
+        });
+        googleInitialized.current = true;
+      }
       window.google.accounts.id.renderButton(googleBtnRef.current, {
         theme: 'outline', size: 'large', type: 'standard', shape: 'pill',
         width: googleBtnRef.current.offsetWidth || 400,
