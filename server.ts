@@ -172,53 +172,42 @@ const authenticate = (req: any, res: any, next: any) => {
 };
 
 const sendVerificationEmail = async (email: string, code: string): Promise<boolean> => {
-  try {
-    // Try Gmail API with OAuth2 first if configured
-    const googleClientId = process.env.GOOGLE_CLIENT_ID;
-    const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const googleRefreshToken = process.env.GOOGLE_REFRESH_TOKEN;
-    if (googleClientId && googleClientSecret && googleRefreshToken) {
-      try {
-        const oauth2Client = new google.auth.OAuth2(googleClientId, googleClientSecret);
-        oauth2Client.setCredentials({ refresh_token: googleRefreshToken });
-        const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-        const utf8Str = Buffer.from(
-          `From: "virelChat" <${process.env.SMTP_USER || 'noreply@virelchat.app'}>\n` +
-          `To: ${email}\n` +
-          `Subject: Your virelChat Verification Code\n\n` +
-          `Your verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, please ignore this email.`
-        ).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-        await gmail.users.messages.send({ userId: 'me', requestBody: { raw: utf8Str } });
-        console.log(`[EMAIL] Verification code sent to ${email} via Gmail API`);
-        return true;
-      } catch (gmailErr) {
-        console.warn('[EMAIL] Gmail API failed, falling back to SMTP:', gmailErr);
-      }
-    }
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
-    if (!smtpUser || !smtpPass) {
-      console.error('[EMAIL] SMTP_USER or SMTP_PASS env vars not set on this server. Cannot send email.');
-      return false;
-    }
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: { user: smtpUser, pass: smtpPass },
-    });
-    await transporter.sendMail({
-      from: `"virelChat" <${smtpUser}>`,
-      to: email,
-      subject: 'Your virelChat Verification Code',
-      text: `Your verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, please ignore this email.`,
-    });
-    console.log(`[EMAIL] Verification code sent to ${email} via SMTP`);
-    return true;
-  } catch (err) {
-    console.error('[EMAIL] Failed to send verification email:', err);
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  if (!smtpUser || !smtpPass) {
+    console.error('[EMAIL] SMTP_USER or SMTP_PASS not set on this server.');
     return false;
   }
+  const configs = [
+    { host: 'smtp.gmail.com', port: 587, secure: false, requireTLS: true },
+    { host: 'smtp.gmail.com', port: 465, secure: true },
+  ];
+  let lastErr: any;
+  for (const cfg of configs) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: cfg.host,
+        port: cfg.port,
+        secure: cfg.secure,
+        requireTLS: cfg.requireTLS || false,
+        auth: { user: smtpUser, pass: smtpPass },
+        tls: { rejectUnauthorized: false },
+      });
+      await transporter.sendMail({
+        from: `"virelChat" <${smtpUser}>`,
+        to: email,
+        subject: 'Your virelChat Verification Code',
+        text: `Your verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, please ignore this email.`,
+      });
+      console.log(`[EMAIL] Code sent to ${email} via ${cfg.host}:${cfg.port}`);
+      return true;
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`[EMAIL] Port ${cfg.port} failed: ${err.code || err.message}`);
+    }
+  }
+  console.error('[EMAIL] All SMTP ports failed:', lastErr?.message);
+  return false;
 };
 
 // --- API Routes ---

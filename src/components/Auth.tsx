@@ -51,6 +51,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const validateGmail = (email: string) => /^[a-zA-Z0-9._%+-]+@gmail\.com$/i.test(email);
   const validatePhone = (phone: string) => /^[0-9+]{8,15}$/.test(phone);
 
+  const clearForm = () => setFormData({ identifier: '', password: '', displayName: '', code: '', newPassword: '' });
+
   const handleResend = async () => {
     setError(''); setSuccessMessage('');
     if (!userId) return;
@@ -111,22 +113,31 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         if (res.data.token && res.data.user) {
           onLogin(res.data.token, res.data.user);
         } else {
+          clearForm();
           setMode('login'); 
           setSuccessMessage('Identity verified. You may now login.');
         }
       } else if (mode === 'forgot') {
         const res = await api.post('/api/auth/forgot-password', { email: idnt });
         setUserId(res.data.userId);
+        clearForm();
         setMode('reset');
         setSuccessMessage(res.data.message);
         setResendCooldown(60);
       } else if (mode === 'reset') {
         const res = await api.post('/api/auth/reset-password', { userId, code: formData.code.trim(), newPassword: formData.newPassword });
+        clearForm();
         setMode('login');
         setSuccessMessage(res.data.message);
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Authentication sequence failed.');
+      if (err.response?.status === 400 || err.response?.status === 403) {
+        setFormData(prev => ({ ...prev, code: '', newPassword: '' }));
+        if (err.response?.data?.error?.toLowerCase().includes('expired')) {
+          clearForm();
+        }
+      }
       if (err.response?.status === 403 && err.response.data.userId) { setUserId(err.response.data.userId); setMode('verify'); setResendCooldown(60); }
     } finally { setIsLoading(false); }
   };
