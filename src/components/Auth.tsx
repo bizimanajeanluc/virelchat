@@ -22,7 +22,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   useEffect(() => {
     if ((mode === 'login' || mode === 'signup') && googleBtnRef.current && window.google?.accounts?.id) {
       window.google.accounts.id.initialize({
-        client_id: '972968562607-6iv5i4vqm4jr9her4o295gognllkslto.apps.googleusercontent.com',
+        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '972968562607-6iv5i4vqm4jr9her4o295gognllkslto.apps.googleusercontent.com',
         cancel_on_tap_outside: false,
         callback: async (response: any) => {
           if (!response.credential) return;
