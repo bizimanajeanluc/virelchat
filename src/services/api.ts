@@ -4,8 +4,6 @@ const RENDER_URL = 'https://virelchat-7jy1.onrender.com';
 
 function resolveApiUrl(): string {
   if (typeof window === 'undefined') return '';
-  const fromWindow = (window as any).__API_URL;
-  if (fromWindow) return fromWindow;
   const fromEnv = import.meta.env.VITE_API_URL;
   if (fromEnv) return fromEnv;
   // If running on a non-localhost domain (e.g. Vercel), default to Render
