@@ -17,6 +17,30 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const googleBtnRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if ((mode === 'login' || mode === 'signup') && googleBtnRef.current && window.google?.accounts?.id) {
+      window.google.accounts.id.initialize({
+        client_id: '972968562607-6iv5i4vqm4jr9her4o295gognllkslto.apps.googleusercontent.com',
+        cancel_on_tap_outside: false,
+        callback: async (response: any) => {
+          if (!response.credential) return;
+          setError(''); setSuccessMessage(''); setIsLoading(true);
+          try {
+            const res = await api.post('/api/auth/google', { credential: response.credential });
+            onLogin(res.data.token, res.data.user);
+          } catch (err: any) {
+            setError(err.response?.data?.error || 'Google Sign-In failed.');
+          } finally { setIsLoading(false); }
+        },
+      });
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: 'outline', size: 'large', type: 'standard', shape: 'pill',
+        width: googleBtnRef.current.offsetWidth || 400,
+      });
+    }
+  }, [mode]);
 
   useEffect(() => {
     let timer: any;
@@ -190,7 +214,17 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               )}
             </div>
 
-            <button type="submit" disabled={isLoading} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-6 rounded-[1.5rem] text-xs uppercase tracking-[0.4em] transition-all shadow-2xl shadow-emerald-900/40 active:scale-[0.98] disabled:opacity-50 mt-8 flex items-center justify-center gap-4 group">
+            {(mode === 'login' || mode === 'signup') && (
+              <div className="pt-2 pb-4">
+                <div className="flex items-center gap-4 mb-5">
+                  <div className="flex-1 h-px bg-white/10" />
+                  <span className="text-[9px] font-black text-slate-600 uppercase tracking-[0.3em]">or continue with</span>
+                  <div className="flex-1 h-px bg-white/10" />
+                </div>
+                <div ref={googleBtnRef} className="flex justify-center w-full [&>div]:w-full [&>div>div]:w-full" />
+              </div>
+            )}
+            <button type="submit" disabled={isLoading} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-6 rounded-[1.5rem] text-xs uppercase tracking-[0.4em] transition-all shadow-2xl shadow-emerald-900/40 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-4 group">
               {isLoading ? <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" /> : <>{mode === 'login' ? 'Login' : mode === 'signup' ? 'Authorize' : mode === 'forgot' ? 'Send Code' : mode === 'reset' ? 'Reset Password' : 'Verify Identity'}<ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>}
             </button>
 

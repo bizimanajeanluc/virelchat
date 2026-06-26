@@ -9,6 +9,8 @@ import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
+import { OAuth2Client } from 'google-auth-library';
+import { google } from 'googleapis';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -171,6 +173,28 @@ const authenticate = (req: any, res: any, next: any) => {
 
 const sendVerificationEmail = async (email: string, code: string): Promise<boolean> => {
   try {
+    // Try Gmail API with OAuth2 first if configured
+    const googleClientId = process.env.GOOGLE_CLIENT_ID;
+    const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const googleRefreshToken = process.env.GOOGLE_REFRESH_TOKEN;
+    if (googleClientId && googleClientSecret && googleRefreshToken) {
+      try {
+        const oauth2Client = new google.auth.OAuth2(googleClientId, googleClientSecret);
+        oauth2Client.setCredentials({ refresh_token: googleRefreshToken });
+        const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+        const utf8Str = Buffer.from(
+          `From: "virelChat" <${process.env.SMTP_USER || 'noreply@virelchat.app'}>\n` +
+          `To: ${email}\n` +
+          `Subject: Your virelChat Verification Code\n\n` +
+          `Your verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, please ignore this email.`
+        ).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        await gmail.users.messages.send({ userId: 'me', requestBody: { raw: utf8Str } });
+        console.log(`[EMAIL] Verification code sent to ${email} via Gmail API`);
+        return true;
+      } catch (gmailErr) {
+        console.warn('[EMAIL] Gmail API failed, falling back to SMTP:', gmailErr);
+      }
+    }
     const smtpUser = process.env.SMTP_USER;
     const smtpPass = process.env.SMTP_PASS;
     if (!smtpUser || !smtpPass) {
@@ -187,7 +211,7 @@ const sendVerificationEmail = async (email: string, code: string): Promise<boole
       subject: 'Your virelChat Verification Code',
       text: `Your verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, please ignore this email.`,
     });
-    console.log(`[EMAIL] Verification code sent to ${email}`);
+    console.log(`[EMAIL] Verification code sent to ${email} via SMTP`);
     return true;
   } catch (err) {
     console.error('[EMAIL] Failed to send verification email:', err);
@@ -427,6 +451,46 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (err: any) {
     console.error('[AUTH] Login Error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    const { credential } = req.body;
+    if (!credential) return res.status(400).json({ error: 'Missing Google credential.' });
+
+    const googleClientId = process.env.GOOGLE_CLIENT_ID;
+    if (!googleClientId) return res.status(500).json({ error: 'Google OAuth not configured on server.' });
+
+    const client = new OAuth2Client(googleClientId);
+    const ticket = await client.verifyIdToken({ idToken: credential, audience: googleClientId });
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) return res.status(400).json({ error: 'Invalid Google token.' });
+
+    const email = payload.email.toLowerCase().trim();
+    const name = payload.name || email.split('@')[0];
+    const picture = payload.picture || null;
+
+    let user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
+
+    if (user) {
+      if (!user.is_verified) {
+        db.prepare('UPDATE users SET is_verified = 1 WHERE id = ?').run(user.id);
+      }
+      db.prepare(`UPDATE users SET last_seen = CURRENT_TIMESTAMP, display_name = COALESCE(NULLIF(?, ''), display_name), profile_picture = COALESCE(NULLIF(?, ''), profile_picture) WHERE id = ?`).run(name, picture, user.id);
+    } else {
+      const userId = uuidv4();
+      const role = email === process.env.ADMIN_EMAIL ? 'admin' : 'user';
+      db.prepare(`INSERT INTO users (id, email, password, display_name, profile_picture, role, is_verified) VALUES (?, ?, ?, ?, ?, ?, 1)`)
+        .run(userId, email, '', name, picture, role);
+      user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+    }
+
+    const token = jwt.sign({ id: user.id, wardId: user.ward_id, role: user.role }, secretToUse, { expiresIn: '1y' });
+    res.json({ token, user: { id: user.id, displayName: user.display_name, profilePicture: user.profile_picture, role: user.role, about: user.about, wardId: user.ward_id } });
+  } catch (err: any) {
+    console.error('[AUTH] Google Sign-In Error:', err);
+    res.status(401).json({ error: 'Google authentication failed.' });
   }
 });
 

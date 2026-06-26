@@ -46,3 +46,16 @@ declare module 'framer-motion' {
   export function useSpring(value: any, config?: any): any;
   export function useInView(options?: any): any;
 }
+
+interface GoogleAccountsId {
+  initialize: (config: { client_id: string; cancel_on_tap_outside: boolean; callback: (response: { credential: string }) => void }) => void;
+  renderButton: (element: HTMLElement, options: { theme: string; size: string; type: string; shape: string; width: number }) => void;
+}
+
+declare module 'googleapis' {
+  export const google: any;
+}
+
+interface Window {
+  google?: { accounts: { id: GoogleAccountsId } };
+}
