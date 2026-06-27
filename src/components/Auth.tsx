@@ -109,10 +109,14 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           password: formData.password, 
           displayName: formData.displayName.trim() 
         });
-        setUserId(res.data.userId);
-        setMode('verify');
-        setSuccessMessage(res.data.message);
-        setResendCooldown(60);
+        if (res.data.token && res.data.user) {
+          onLogin(res.data.token, res.data.user);
+        } else {
+          setUserId(res.data.userId);
+          setMode('verify');
+          setSuccessMessage(res.data.message);
+          setResendCooldown(60);
+        }
       } else if (mode === 'verify') {
         const res = await api.post('/api/auth/verify', { userId, code: formData.code.trim() });
         if (res.data.token && res.data.user) {
