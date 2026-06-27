@@ -953,8 +953,13 @@ app.use('/.well-known', express.static(path.join(distPath, '.well-known')));
 // API Routes (already defined)
 
 // Catch-all: serve static files or SPA index.html for non-API requests
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) return next();
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  if (req.path.startsWith('/socket.io')) {
+    return res.status(404).end();
+  }
 
   // Try to serve the file from dist
   const filePath = path.join(distPath, req.path);
