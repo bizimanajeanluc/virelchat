@@ -56,21 +56,18 @@
       }
 
       // Handle PWA Install Prompt
-      let deferredPrompt;
+      window.deferredPrompt = null;
       window.addEventListener('beforeinstallprompt', (e) => {
-        // Prevent Chrome 67 and earlier from automatically showing the prompt
         e.preventDefault();
-        // Stash the event so it can be triggered later.
-        deferredPrompt = e;
+        window.deferredPrompt = e;
         console.log('PWA Install prompt saved');
-        
-        // Optional: Show your own custom install button here if you want
-        // For example: document.getElementById('install-btn').style.display = 'block';
+        window.dispatchEvent(new CustomEvent('pwa-install-ready', { detail: e }));
       });
 
       window.addEventListener('appinstalled', (evt) => {
         console.log('VirelChat was installed');
-        deferredPrompt = null;
+        window.deferredPrompt = null;
+        window.dispatchEvent(new CustomEvent('pwa-installed'));
       });
     </script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>

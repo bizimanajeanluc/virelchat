@@ -6,6 +6,7 @@ import { Profile } from './components/Profile';
 import { Admin } from './components/Admin';
 import { DeviceManager } from './components/DeviceManager';
 import { Landing } from './components/Landing';
+import { InstallPWA } from './components/InstallPWA';
 import { initSocket, disconnectSocket } from './services/socket';
 import { CryptoEngine } from './crypto/engine';
 import { Shield, MessageSquare, User, Settings, LogOut, Database, ArrowLeft } from 'lucide-react';
@@ -280,6 +281,8 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      <InstallPWA />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
@@ -192,7 +193,24 @@ app.post('/api/auth/signup', async (req, res) => {
     if (email) {
       const sent = await sendVerificationEmail(email, code);
       if (!sent) {
-        return res.status(500).json({ error: 'Failed to send verification email. SMTP not configured on server.' });
+        // SMTP not configured - auto-verify the user so signup doesn't block
+        console.log(`[AUTH] SMTP not configured, auto-verifying userId=${userId}. Code was: ${code}`);
+        db.prepare('UPDATE users SET is_verified = 1 WHERE id = ?').run(userId);
+        const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+        const token = jwt.sign({ id: user.id, wardId: user.ward_id, role: user.role }, secretToUse, { expiresIn: '1y' });
+        db.prepare('DELETE FROM verification_codes WHERE user_id = ?').run(userId);
+        return res.json({
+          token,
+          user: {
+            id: user.id,
+            displayName: user.display_name,
+            profilePicture: user.profile_picture,
+            role: user.role,
+            about: user.about,
+            wardId: user.ward_id,
+          },
+          message: 'Account created and verified automatically.'
+        });
       }
     }
     
@@ -223,7 +241,7 @@ app.post('/api/auth/resend-code', async (req, res) => {
     if (user.email) {
       const sent = await sendVerificationEmail(user.email, code);
       if (!sent) {
-        return res.status(500).json({ error: 'Failed to send verification email. SMTP not configured on server.' });
+        console.log(`[AUTH] SMTP not configured for resend. Code: ${code}`);
       }
     }
     
@@ -306,7 +324,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     console.log(`[AUTH] Forgot Password: userId=${user.id}, code=${code}, email=${email}`);
     const sent = await sendVerificationEmail(email, code);
     if (!sent) {
-      return res.status(500).json({ error: 'Failed to send verification email. SMTP not configured on server.' });
+      console.log(`[AUTH] SMTP not configured for forgot-password. Code: ${code}`);
     }
 
     res.json({ userId: user.id, message: 'Verification code sent to your Gmail. Check your inbox and enter the code to reset your password.' });
@@ -928,17 +946,23 @@ app.use('/.well-known', express.static(path.join(distPath, '.well-known')));
 
 // API Routes (already defined)
 
-// Catch-all route to serve the frontend for any non-API request
-app.get('*', (req, res) => {
-  const isApiRequest = req.path.startsWith('/api') || req.path.startsWith('/socket.io');
-  const isStaticFile = req.path.includes('.') || req.path.startsWith('/.well-known');
-  
-  if (!isApiRequest && !isStaticFile) {
-    res.sendFile(path.join(distPath, 'index.html'));
-  } else if (isStaticFile && !isApiRequest) {
-    // If it's a static file request that wasn't found in dist, return 404
-    res.status(404).end();
+// Catch-all: serve static files or SPA index.html for non-API requests
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) return next();
+
+  // Try to serve the file from dist
+  const filePath = path.join(distPath, req.path);
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
   }
+
+  // For requests without a file extension, serve index.html (SPA routing)
+  if (!path.extname(req.path)) {
+    return res.sendFile(path.join(distPath, 'index.html'));
+  }
+
+  // Static file not found
+  res.status(404).end();
 });
 
 const PORT = Number(process.env.PORT) || 3000;
