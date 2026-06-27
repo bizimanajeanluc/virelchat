@@ -72,16 +72,22 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// 3. CORS POLICY: Allow both Railway URL and Android App Origin
-const allowedOrigins = [
-  process.env.APP_URL, // e.g., https://virelchat-production.up.railway.app
-  'android-app://com.jeanluc.virelchat' // Necessary for Android TWA/APK
-].filter(Boolean) as string[];
+// 3. CORS POLICY: Allow Vercel frontend, Render self, Railway, custom domain, and Android TWA
+const corsOrigins = [
+  process.env.APP_URL,
+  process.env.VITE_API_URL,
+  process.env.FRONTEND_URL,
+  'https://virelchat-7jy1.onrender.com',
+  'https://virelchat-production.up.railway.app',
+  /.+\.vercel\.app$/,              // all Vercel deployments
+  'android-app://com.jeanluc.virelchat',
+];
+const corsOriginList = corsOrigins.filter(Boolean) as (string | RegExp)[];
 
 const corsOptions = {
-  origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
+  origin: corsOriginList.length > 0 ? corsOriginList : '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
+  credentials: true,
 };
 
 app.use(cors(corsOptions));
